@@ -1,4 +1,4 @@
-import { ChangeEvent, FormEvent, useEffect, useState } from 'react';
+import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 
 import {
   api,
@@ -1045,7 +1045,7 @@ function InstrumentView({ instrument, onBack, onChanged, watchlists }: {
         <section className="quote-chart-panel">
           <div className="quote-summary"><strong>{formatCurrency(quote?.lastPrice ?? null, quote?.currency ?? 'USD')}</strong><span className={positive ? 'positive' : 'negative'}>{formatPercent(quote?.percentChange ?? null)} · {formatCurrency(quote?.change ?? null, quote?.currency ?? 'USD')} today</span><small>{quote?.isMarketOpen ? 'Market open' : 'Latest available price'}</small></div>
           <div className="range-controls">{Object.keys(RANGE_OPTIONS).map((item) => <button className={range === item ? 'selected' : ''} key={item} onClick={() => setRange(item)} type="button">{item}</button>)}</div>
-          <LineChart positive={positive} points={data.chart?.data ?? []} />
+          <LineChart currency={quote?.currency ?? 'USD'} positive={positive} previousClose={quote?.previousClose ?? null} points={data.chart?.data ?? []} range={range} />
         </section>
         <aside className="card quote-facts">
           <h2>Quote details</h2>
@@ -1093,23 +1093,201 @@ function Fact({ label, value }: { label: string; value: string }) {
   return <div className="fact"><span>{label}</span><strong>{value}</strong></div>;
 }
 
-function LineChart({ points, positive }: { points: ChartPoint[]; positive: boolean }) {
+function LineChart({
+  currency,
+  points,
+  positive,
+  previousClose,
+  range,
+}: {
+  currency: string;
+  points: ChartPoint[];
+  positive: boolean;
+  previousClose: number | null;
+  range: string;
+}) {
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+
+  const PADDING = { top: 12, right: 8, bottom: 32, left: 62 };
+  const VIEW_W = 800;
+  const VIEW_H = 300;
+  const plotW = VIEW_W - PADDING.left - PADDING.right;
+  const plotH = VIEW_H - PADDING.top - PADDING.bottom;
+
+  // Hover handlers — must be declared before any early returns (Rules of Hooks)
+  const handleMouseMove = useCallback((event: React.MouseEvent<SVGSVGElement>) => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    const scaleX = VIEW_W / rect.width;
+    const mouseX = (event.clientX - rect.left) * scaleX;
+    const plotX = mouseX - PADDING.left;
+    const fraction = Math.max(0, Math.min(1, plotX / plotW));
+    const index = Math.round(fraction * (points.length - 1));
+    setHoverIndex(index);
+  }, [points.length, plotW]);
+
+  const handleMouseLeave = useCallback(() => {
+    setHoverIndex(null);
+  }, []);
+
   if (points.length < 2) {
     return <div className="chart-empty">Chart data is unavailable for this range.</div>;
   }
 
-  const values = points.map((point) => point.close);
-  const minimum = Math.min(...values);
-  const maximum = Math.max(...values);
-  const difference = maximum - minimum || 1;
-  const path = values.map((value, index) => {
-    const x = (index / (values.length - 1)) * 100;
-    const y = 90 - ((value - minimum) / difference) * 78;
+  const values = points.map((p) => p.close);
+  const rawMin = Math.min(...values);
+  const rawMax = Math.max(...values);
+  const valuePad = (rawMax - rawMin) * 0.08 || rawMax * 0.02 || 1;
+  const minimum = rawMin - valuePad;
+  const maximum = rawMax + valuePad;
+  const difference = maximum - minimum;
 
-    return `${x},${y}`;
-  }).join(' ');
+  function toX(index: number): number {
+    return PADDING.left + (index / (values.length - 1)) * plotW;
+  }
 
-  return <svg aria-label="Price chart" className="line-chart" preserveAspectRatio="none" role="img" viewBox="0 0 100 100"><line x1="0" x2="100" y1="90" y2="90" /><polyline className={positive ? 'chart-positive' : 'chart-negative'} fill="none" points={path} vectorEffect="non-scaling-stroke" /></svg>;
+  function toY(value: number): number {
+    return PADDING.top + plotH - ((value - minimum) / difference) * plotH;
+  }
+
+  // Build SVG path strings
+  const linePath = values.map((v, i) => `${i === 0 ? 'M' : 'L'}${toX(i).toFixed(2)},${toY(v).toFixed(2)}`).join(' ');
+  const areaPath = `${linePath} L${toX(values.length - 1).toFixed(2)},${(PADDING.top + plotH).toFixed(2)} L${PADDING.left.toFixed(2)},${(PADDING.top + plotH).toFixed(2)} Z`;
+
+  // Y-axis labels (5 ticks)
+  const yTicks = Array.from({ length: 5 }, (_, i) => minimum + (i / 4) * difference);
+
+  // X-axis labels — pick ~6 evenly spaced points
+  const xTickCount = Math.min(6, points.length);
+  const xTicks = Array.from({ length: xTickCount }, (_, i) => {
+    const index = Math.round(i * (points.length - 1) / (xTickCount - 1));
+    return { index, timestamp: points[index]?.timestamp ?? '' };
+  });
+
+  // Format x-axis label based on selected range
+  function formatXLabel(timestamp: string): string {
+    if (!timestamp) return '';
+    const date = new Date(timestamp);
+    if (range === '1D') {
+      return date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    }
+    if (range === '5D' || range === '1M') {
+      return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    }
+    return date.toLocaleDateString(undefined, { month: 'short', year: '2-digit' });
+  }
+
+  // Previous close reference line
+  const prevCloseY = previousClose !== null ? toY(previousClose) : null;
+
+  // Hover point data
+  const hoverPoint = hoverIndex !== null ? points[hoverIndex] : null;
+  const hoverX = hoverIndex !== null ? toX(hoverIndex) : null;
+  const hoverY = hoverIndex !== null ? toY(values[hoverIndex]!) : null;
+
+  const tooltipWidth = 130;
+  const tooltipLeft = hoverX !== null && hoverX + tooltipWidth + 8 > VIEW_W - PADDING.right
+    ? (hoverX ?? 0) - tooltipWidth - 8
+    : (hoverX ?? 0) + 8;
+
+  const colorClass = positive ? 'chart-positive' : 'chart-negative';
+  const strokeColor = positive ? '#1a7f3c' : '#c5221f';
+  const gradientId = positive ? 'grad-positive' : 'grad-negative';
+  const gradientColor = positive ? '#188038' : '#c5221f';
+
+  return (
+    <div className="line-chart-container">
+      <svg
+        aria-label="Interactive price chart"
+        className="line-chart"
+        onMouseLeave={handleMouseLeave}
+        onMouseMove={handleMouseMove}
+        preserveAspectRatio="none"
+        ref={svgRef}
+        role="img"
+        viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
+      >
+        <defs>
+          <linearGradient gradientUnits="userSpaceOnUse" id={gradientId} x1="0" x2="0" y1={PADDING.top} y2={PADDING.top + plotH}>
+            <stop offset="0%" stopColor={gradientColor} stopOpacity="0.18" />
+            <stop offset="100%" stopColor={gradientColor} stopOpacity="0.01" />
+          </linearGradient>
+          <clipPath id="chart-clip">
+            <rect height={plotH} width={plotW} x={PADDING.left} y={PADDING.top} />
+          </clipPath>
+        </defs>
+
+        {/* Y-axis grid lines and labels */}
+        {yTicks.map((tick) => {
+          const y = toY(tick);
+          return (
+            <g key={tick}>
+              <line className="chart-grid" x1={PADDING.left} x2={VIEW_W - PADDING.right} y1={y} y2={y} />
+              <text className="chart-axis-label" textAnchor="end" x={PADDING.left - 8} y={y + 4}>
+                {tick.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* X-axis time labels */}
+        {xTicks.map(({ index, timestamp }) => (
+          <text className="chart-axis-label" key={index} textAnchor="middle" x={toX(index)} y={VIEW_H - 8}>
+            {formatXLabel(timestamp)}
+          </text>
+        ))}
+
+        {/* Previous close dashed reference line */}
+        {prevCloseY !== null && prevCloseY >= PADDING.top && prevCloseY <= PADDING.top + plotH && (
+          <>
+            <line className="chart-prev-close" x1={PADDING.left} x2={VIEW_W - PADDING.right} y1={prevCloseY} y2={prevCloseY} />
+            <text className="chart-prev-close-label" textAnchor="end" x={VIEW_W - PADDING.right} y={prevCloseY - 5}>
+              Prev close
+            </text>
+          </>
+        )}
+
+        {/* Gradient area fill */}
+        <path clipPath="url(#chart-clip)" d={areaPath} fill={`url(#${gradientId})`} stroke="none" />
+
+        {/* Main price line */}
+        <path className={colorClass} clipPath="url(#chart-clip)" d={linePath} fill="none" vectorEffect="non-scaling-stroke" />
+
+        {/* Hover overlay */}
+        {hoverX !== null && hoverY !== null && (
+          <>
+            {/* Vertical crosshair */}
+            <line className="chart-crosshair" x1={hoverX} x2={hoverX} y1={PADDING.top} y2={PADDING.top + plotH} />
+
+            {/* Dot on the line */}
+            <circle cx={hoverX} cy={hoverY} fill={strokeColor} r="5" stroke="var(--surface, #fff)" strokeWidth="2" />
+
+            {/* Tooltip */}
+            <g>
+              <rect
+                fill="var(--surface, #fff)"
+                height="46"
+                rx="6"
+                stroke="var(--border, #dde2df)"
+                strokeWidth="1"
+                width={tooltipWidth}
+                x={tooltipLeft}
+                y={PADDING.top + 8}
+              />
+              <text className="chart-tooltip-price" textAnchor="middle" x={tooltipLeft + tooltipWidth / 2} y={PADDING.top + 28}>
+                {hoverPoint ? new Intl.NumberFormat(undefined, { currency, maximumFractionDigits: 2, minimumFractionDigits: 2, style: 'currency' }).format(hoverPoint.close) : ''}
+              </text>
+              <text className="chart-tooltip-time" textAnchor="middle" x={tooltipLeft + tooltipWidth / 2} y={PADDING.top + 44}>
+                {hoverPoint ? formatXLabel(hoverPoint.timestamp) : ''}
+              </text>
+            </g>
+          </>
+        )}
+      </svg>
+    </div>
+  );
 }
 
 function LoadingScreen({ message }: { message: string }) {
