@@ -145,6 +145,9 @@ function FinanceApplication({ session, onSessionChanged }: {
   const [error, setError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [marketGroupsOpen, setMarketGroupsOpen] = useState(false);
+  const [createWatchlistOpen, setCreateWatchlistOpen] = useState(false);
+  const [renameWatchlistTarget, setRenameWatchlistTarget] = useState<Watchlist | null>(null);
+  const [deleteWatchlistTarget, setDeleteWatchlistTarget] = useState<Watchlist | null>(null);
   const [view, setView] = useState<View>({ kind: 'home' });
 
   async function loadDashboard(): Promise<void> {
@@ -181,22 +184,12 @@ function FinanceApplication({ session, onSessionChanged }: {
     document.documentElement.dataset.theme = resolvedTheme;
   }, [settings?.theme]);
 
-  async function createWatchlist(): Promise<void> {
-    const name = window.prompt('Watchlist name');
-
-    if (name === null || name.trim().length === 0) {
-      return;
-    }
-
-    try {
-      await api<Watchlist>('/api/watchlists', {
-        body: JSON.stringify({ name }),
-        method: 'POST',
-      });
-      await loadDashboard();
-    } catch (requestError) {
-      setError(errorMessage(requestError));
-    }
+  async function submitCreateWatchlist(name: string): Promise<void> {
+    await api<Watchlist>('/api/watchlists', {
+      body: JSON.stringify({ name }),
+      method: 'POST',
+    });
+    await loadDashboard();
   }
 
   async function selectWatchlist(watchlistId: string): Promise<void> {
@@ -211,35 +204,17 @@ function FinanceApplication({ session, onSessionChanged }: {
     }
   }
 
-  async function renameWatchlist(watchlist: Watchlist): Promise<void> {
-    const name = window.prompt('Watchlist name', watchlist.name);
-
-    if (name === null || name.trim().length === 0) {
-      return;
-    }
-
-    try {
-      await api<Watchlist>(`/api/watchlists/${watchlist.id}`, {
-        body: JSON.stringify({ name }),
-        method: 'PUT',
-      });
-      await loadDashboard();
-    } catch (requestError) {
-      setError(errorMessage(requestError));
-    }
+  async function submitRenameWatchlist(watchlistId: string, name: string): Promise<void> {
+    await api<Watchlist>(`/api/watchlists/${watchlistId}`, {
+      body: JSON.stringify({ name }),
+      method: 'PUT',
+    });
+    await loadDashboard();
   }
 
-  async function deleteWatchlist(watchlist: Watchlist): Promise<void> {
-    if (!window.confirm(`Delete ${watchlist.name}?`)) {
-      return;
-    }
-
-    try {
-      await api<void>(`/api/watchlists/${watchlist.id}`, { method: 'DELETE' });
-      await loadDashboard();
-    } catch (requestError) {
-      setError(errorMessage(requestError));
-    }
+  async function submitDeleteWatchlist(watchlistId: string): Promise<void> {
+    await api<void>(`/api/watchlists/${watchlistId}`, { method: 'DELETE' });
+    await loadDashboard();
   }
 
   async function removeWatchlistEntry(watchlistId: string, entryId: string): Promise<void> {
@@ -296,11 +271,11 @@ function FinanceApplication({ session, onSessionChanged }: {
       {view.kind === 'home' ? (
         <Dashboard
           home={home}
-          onCreateWatchlist={createWatchlist}
-          onDeleteWatchlist={deleteWatchlist}
+          onCreateWatchlist={() => setCreateWatchlistOpen(true)}
+          onDeleteWatchlist={(watchlist) => setDeleteWatchlistTarget(watchlist)}
           onEditMarketGroups={() => setMarketGroupsOpen(true)}
           onOpenInstrument={openInstrument}
-          onRenameWatchlist={renameWatchlist}
+          onRenameWatchlist={(watchlist) => setRenameWatchlistTarget(watchlist)}
           onRemoveWatchlistEntry={removeWatchlistEntry}
           onSelectWatchlist={selectWatchlist}
           watchlists={watchlists}
@@ -314,6 +289,33 @@ function FinanceApplication({ session, onSessionChanged }: {
         />
       )}
 
+      {createWatchlistOpen ? (
+        <WatchlistModal
+          onClose={() => setCreateWatchlistOpen(false)}
+          onSubmit={submitCreateWatchlist}
+          submitLabel="Create"
+          title="Create watchlist"
+        />
+      ) : null}
+      {renameWatchlistTarget !== null ? (
+        <WatchlistModal
+          initialName={renameWatchlistTarget.name}
+          onClose={() => setRenameWatchlistTarget(null)}
+          onSubmit={(name) => submitRenameWatchlist(renameWatchlistTarget.id, name)}
+          submitLabel="Save"
+          title="Rename watchlist"
+        />
+      ) : null}
+      {deleteWatchlistTarget !== null ? (
+        <ConfirmModal
+          confirmLabel="Delete list"
+          danger
+          message={`Are you sure you want to delete "${deleteWatchlistTarget.name}"? This action cannot be undone.`}
+          onClose={() => setDeleteWatchlistTarget(null)}
+          onConfirm={() => submitDeleteWatchlist(deleteWatchlistTarget.id)}
+          title="Delete watchlist"
+        />
+      ) : null}
       {settingsOpen ? (
         <SettingsPanel
           onClose={() => setSettingsOpen(false)}
@@ -341,11 +343,11 @@ function FinanceApplication({ session, onSessionChanged }: {
 
 function Dashboard({ home, onCreateWatchlist, onDeleteWatchlist, onEditMarketGroups, onOpenInstrument, onRenameWatchlist, onRemoveWatchlistEntry, onSelectWatchlist, watchlists }: {
   home: HomeData | null;
-  onCreateWatchlist: () => Promise<void>;
-  onDeleteWatchlist: (watchlist: Watchlist) => Promise<void>;
+  onCreateWatchlist: () => void;
+  onDeleteWatchlist: (watchlist: Watchlist) => void;
   onEditMarketGroups: () => void;
   onOpenInstrument: (instrument: InstrumentReference) => void;
-  onRenameWatchlist: (watchlist: Watchlist) => Promise<void>;
+  onRenameWatchlist: (watchlist: Watchlist) => void;
   onRemoveWatchlistEntry: (watchlistId: string, entryId: string) => Promise<void>;
   onSelectWatchlist: (watchlistId: string) => Promise<void>;
   watchlists: Watchlist[];
@@ -383,9 +385,9 @@ function Dashboard({ home, onCreateWatchlist, onDeleteWatchlist, onEditMarketGro
                   {watchlists.length === 0 ? <option value="">No watchlists</option> : null}
                   {watchlists.map((watchlist) => <option key={watchlist.id} value={watchlist.id}>{watchlist.name}</option>)}
                 </select>
-                <button className="text-button" onClick={() => void onCreateWatchlist()} type="button">+ New list</button>
-                {selectedWatchlist === null ? null : <button className="text-button" onClick={() => void onRenameWatchlist(selectedWatchlist)} type="button">Rename</button>}
-                {selectedWatchlist === null ? null : <button className="text-button" onClick={() => void onDeleteWatchlist(selectedWatchlist)} type="button">Delete</button>}
+                <button className="text-button" onClick={onCreateWatchlist} type="button">+ New list</button>
+                {selectedWatchlist === null ? null : <button className="text-button" onClick={() => onRenameWatchlist(selectedWatchlist)} type="button">Rename</button>}
+                {selectedWatchlist === null ? null : <button className="text-button" onClick={() => onDeleteWatchlist(selectedWatchlist)} type="button">Delete</button>}
               </div>
             </div>
           </div>
@@ -412,12 +414,12 @@ function Dashboard({ home, onCreateWatchlist, onDeleteWatchlist, onEditMarketGro
   );
 }
 
-function EmptyWatchlist({ onCreate }: { onCreate: () => Promise<void> }) {
+function EmptyWatchlist({ onCreate }: { onCreate: () => void }) {
   return (
     <div className="empty-state">
       <h2>Start your first watchlist</h2>
       <p>Add stocks, ETFs, currencies, or crypto from the search box.</p>
-      <button className="primary-button" onClick={() => void onCreate()} type="button">Create watchlist</button>
+      <button className="primary-button" onClick={onCreate} type="button">Create watchlist</button>
     </div>
   );
 }
@@ -556,6 +558,146 @@ function SearchBox({ onSelect }: { onSelect: (instrument: InstrumentReference) =
   );
 }
 
+function WatchlistModal({ initialName = '', title, submitLabel = 'Create', onClose, onSubmit }: {
+  initialName?: string;
+  title: string;
+  submitLabel?: string;
+  onClose: () => void;
+  onSubmit: (name: string) => Promise<void>;
+}) {
+  const [name, setName] = useState(initialName);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setError('Watchlist name is required.');
+      return;
+    }
+
+    try {
+      setPending(true);
+      setError(null);
+      await onSubmit(trimmed);
+      onClose();
+    } catch (requestError) {
+      setError(errorMessage(requestError));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <div className="dialog-backdrop centered" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <div aria-label={title} className="modal-dialog" role="dialog" aria-modal="true">
+        <div className="dialog-header">
+          <h2>{title}</h2>
+          <button className="icon-button" onClick={onClose} type="button">×</button>
+        </div>
+        <form className="modal-form" onSubmit={(event) => void handleSubmit(event)}>
+          <label>
+            Watchlist name
+            <input
+              autoFocus
+              disabled={pending}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Watchlist name"
+              required
+              type="text"
+              value={name}
+            />
+          </label>
+          {error === null ? null : <p className="form-message" role="alert">{error}</p>}
+          <div className="modal-actions">
+            <button className="secondary-button" disabled={pending} onClick={onClose} type="button">Cancel</button>
+            <button className="primary-button" disabled={pending} type="submit">{pending ? 'Saving…' : submitLabel}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function ConfirmModal({
+  confirmLabel = 'Confirm',
+  danger = false,
+  message,
+  onClose,
+  onConfirm,
+  title,
+}: {
+  confirmLabel?: string;
+  danger?: boolean;
+  message: string;
+  onClose: () => void;
+  onConfirm: () => Promise<void>;
+  title: string;
+}) {
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  async function handleConfirm(): Promise<void> {
+    try {
+      setPending(true);
+      setError(null);
+      await onConfirm();
+      onClose();
+    } catch (requestError) {
+      setError(errorMessage(requestError));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <div className="dialog-backdrop centered" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <div aria-label={title} className="modal-dialog" role="dialog" aria-modal="true">
+        <div className="dialog-header">
+          <h2>{title}</h2>
+          <button className="icon-button" onClick={onClose} type="button">×</button>
+        </div>
+        <div className="modal-body">
+          <p className="muted">{message}</p>
+          {error === null ? null : <p className="form-message" role="alert">{error}</p>}
+          <div className="modal-actions">
+            <button className="secondary-button" disabled={pending} onClick={onClose} type="button">Cancel</button>
+            <button
+              className={`primary-button ${danger ? 'danger-button-primary' : ''}`}
+              disabled={pending}
+              onClick={() => void handleConfirm()}
+              type="button"
+            >
+              {pending ? 'Processing…' : confirmLabel}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SettingsPanel({ onClose, onUpdated, settings }: {
   onClose: () => void;
   onUpdated: () => void;
@@ -634,18 +776,17 @@ function SettingsPanel({ onClose, onUpdated, settings }: {
     }
   }
 
-  async function restoreBackup(event: ChangeEvent<HTMLInputElement>): Promise<void> {
+  const [restoreFile, setRestoreFile] = useState<File | null>(null);
+
+  function handleRestoreFileSelect(event: ChangeEvent<HTMLInputElement>): void {
     const file = event.target.files?.[0];
-
-    if (file === undefined) {
-      return;
+    if (file !== undefined) {
+      setRestoreFile(file);
     }
+    event.target.value = '';
+  }
 
-    if (!window.confirm('Restore this backup? It will replace all current watchlists, settings, and provider keys.')) {
-      event.target.value = '';
-      return;
-    }
-
+  async function performRestore(file: File): Promise<void> {
     try {
       setPending(true);
       setMessage(null);
@@ -659,7 +800,6 @@ function SettingsPanel({ onClose, onUpdated, settings }: {
     } catch (requestError) {
       setMessage(errorMessage(requestError));
     } finally {
-      event.target.value = '';
       setPending(false);
     }
   }
@@ -712,11 +852,21 @@ function SettingsPanel({ onClose, onUpdated, settings }: {
           <button className="secondary-button" onClick={() => void downloadBackup()} type="button">Download backup</button>
           <label className="restore-input">
             Restore backup
-            <input accept="application/json,.json" disabled={pending} onChange={(event) => void restoreBackup(event)} type="file" />
+            <input accept="application/json,.json" disabled={pending} onChange={handleRestoreFileSelect} type="file" />
           </label>
         </section>
         {message === null ? null : <p className="form-message" role="status">{message}</p>}
       </aside>
+      {restoreFile !== null ? (
+        <ConfirmModal
+          confirmLabel="Restore"
+          danger
+          message="Restore this backup? It will replace all current watchlists, settings, and provider keys."
+          onClose={() => setRestoreFile(null)}
+          onConfirm={() => performRestore(restoreFile)}
+          title="Restore backup"
+        />
+      ) : null}
     </div>
   );
 }
