@@ -1,0 +1,19 @@
+{
+  "name": "open-finance-classic",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@11.9.0",
+  "scripts": {
+    "build": "pnpm --recursive run build",
+    "dev": "pnpm -r --parallel --filter @open-finance/api --filter @open-finance/web run dev",
+    "dev:api": "pnpm --filter @open-finance/api dev",
+    "dev:web": "pnpm --filter @open-finance/web dev",
+    "lint": "pnpm --recursive run lint",
+    "test": "pnpm --filter @open-finance/api test",
+    "typecheck": "pnpm --recursive run typecheck"
+  },
+  "engines": {
+    "node": ">=22.13.0",
+    "pnpm": ">=11.9.0"
+  }
+}

@@ -1,0 +1,7 @@
+.git
+.idea
+.env
+.pnpm-store
+node_modules
+apps/*/dist
+coverage
