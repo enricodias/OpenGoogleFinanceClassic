@@ -80,15 +80,16 @@ export class MarketDataService {
     userId: string,
     from: string,
     to: string,
+    symbol: string | null = null,
   ): Promise<CachedResult<FinnhubEarningsCalendarEntry[]>> {
     const client = await this.finnhubClient(userId);
 
     return this.cache.getOrLoad(
       'finnhub:earnings-calendar',
-      { from, to },
+      { from, symbol, to },
       900,
       3600,
-      async () => client.getEarningsCalendar(from, to),
+      async () => client.getEarningsCalendar(from, to, symbol),
     );
   }
 

@@ -68,8 +68,9 @@ export function registerMarketDataRoutes(
     const user = await auth.requireCurrentUser(request);
     const from = readDate(request.query, 'from', today());
     const to = readDate(request.query, 'to', daysAhead(7));
+    const symbol = readOptionalQueryString(request.query, 'symbol');
 
-    return withProviderError(() => marketData.getEarningsCalendar(user.id, from, to));
+    return withProviderError(() => marketData.getEarningsCalendar(user.id, from, to, symbol));
   });
 
   server.get('/api/market/news', async (request) => {

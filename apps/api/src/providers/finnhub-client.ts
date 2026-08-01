@@ -40,10 +40,14 @@ export class FinnhubClient extends ProviderClient {
 
       return {
         actualEarningsPerShare: readOptionalNumber(entry.epsActual),
+        actualRevenue: readOptionalNumber(entry.revenueActual),
         estimatedEarningsPerShare: readOptionalNumber(entry.epsEstimate),
+        estimatedRevenue: readOptionalNumber(entry.revenueEstimate),
+        quarter: readOptionalNumber(entry.quarter),
         releaseDate: readString(entry.date),
         releaseTime: readOptionalString(entry.hour),
         symbol: readString(entry.symbol),
+        year: readOptionalNumber(entry.year),
       };
     });
   }
@@ -60,10 +64,14 @@ export class FinnhubClient extends ProviderClient {
 
       return {
         actualEarningsPerShare: readOptionalNumber(entry.actual),
+        actualRevenue: readOptionalNumber(entry.revenueActual),
         estimatedEarningsPerShare: readOptionalNumber(entry.estimate),
+        estimatedRevenue: readOptionalNumber(entry.revenueEstimate),
+        quarter: readOptionalNumber(entry.quarter),
         releaseDate: readString(entry.period),
         releaseTime: null,
         surprisePercent: readOptionalNumber(entry.surprisePercent),
+        year: readOptionalNumber(entry.year),
       };
     }).sort((left, right) => right.releaseDate.localeCompare(left.releaseDate));
   }

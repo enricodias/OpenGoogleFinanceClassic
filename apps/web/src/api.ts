@@ -62,21 +62,29 @@ export interface CompanyProfile {
 
 export interface EarningsCalendarEntry {
   actualEarningsPerShare: number | null;
+  actualRevenue?: number | null;
   currency: string | null;
   estimatedEarningsPerShare: number | null;
+  estimatedRevenue?: number | null;
   exchange: string | null;
   name: string;
+  quarter?: number | null;
   releaseDate: string;
   releaseTime: string | null;
   symbol: string;
+  year?: number | null;
 }
 
 export interface EarningsRecord {
   actualEarningsPerShare: number | null;
+  actualRevenue: number | null;
   estimatedEarningsPerShare: number | null;
+  estimatedRevenue: number | null;
+  quarter: number | null;
   releaseDate: string;
   releaseTime: string | null;
   surprisePercent: number | null;
+  year: number | null;
 }
 
 export interface InstrumentReference {
@@ -134,6 +142,7 @@ export interface QuoteTile {
 
 export interface Settings {
   configuredProviders: string[];
+  dateFormat: 'dd/mm/yyyy' | 'mm/dd/yyyy';
   quoteRefreshIntervalSeconds: number;
   selectedWatchlistId: string | null;
   theme: 'dark' | 'light' | 'system';

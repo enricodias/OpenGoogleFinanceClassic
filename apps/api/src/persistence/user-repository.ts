@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import type {
   EncryptedSecret,
+  DateFormat,
   Session,
   ThemePreference,
   User,
@@ -87,6 +88,7 @@ export class UserRepository {
     if (settings !== null) {
       return {
         ...settings,
+        dateFormat: settings.dateFormat ?? 'dd/mm/yyyy',
         quoteRefreshIntervalSeconds: settings.quoteRefreshIntervalSeconds ?? 120,
       };
     }
@@ -137,14 +139,21 @@ export class UserRepository {
     await setJson(this.client, this.settingsKey(userId), '$.theme', theme);
   }
 
+  public async setDateFormat(userId: string, dateFormat: DateFormat): Promise<void> {
+    await this.getSettings(userId);
+    await setJson(this.client, this.settingsKey(userId), '$.dateFormat', dateFormat);
+  }
+
   public async replaceSettings(
     userId: string,
     theme: ThemePreference,
     selectedWatchlistId: string | null,
     providerCredentials: Record<string, EncryptedSecret>,
     quoteRefreshIntervalSeconds = 120,
+    dateFormat: DateFormat = 'mm/dd/yyyy',
   ): Promise<void> {
     await setJson(this.client, this.settingsKey(userId), '$', {
+      dateFormat,
       providerCredentials,
       quoteRefreshIntervalSeconds,
       selectedWatchlistId,
@@ -176,6 +185,7 @@ export class UserRepository {
 
   private defaultSettings(userId: string): UserSettings {
     return {
+      dateFormat: 'mm/dd/yyyy',
       providerCredentials: {},
       quoteRefreshIntervalSeconds: 120,
       selectedWatchlistId: null,

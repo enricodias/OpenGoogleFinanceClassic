@@ -7,6 +7,7 @@ export interface User {
 }
 
 export interface UserSettings {
+  dateFormat: DateFormat;
   providerCredentials: Record<string, EncryptedSecret>;
   quoteRefreshIntervalSeconds: number;
   selectedWatchlistId: string | null;
@@ -27,3 +28,5 @@ export interface Session {
 }
 
 export type ThemePreference = 'dark' | 'light' | 'system';
+
+export type DateFormat = 'dd/mm/yyyy' | 'mm/dd/yyyy';

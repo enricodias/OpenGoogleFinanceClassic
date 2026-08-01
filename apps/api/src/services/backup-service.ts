@@ -1,5 +1,5 @@
 import type { BackupDocument } from '../domain/backup.js';
-import type { EncryptedSecret, ThemePreference } from '../domain/user.js';
+import type { DateFormat, EncryptedSecret, ThemePreference } from '../domain/user.js';
 import type { InstrumentReference, MarketGroup, Watchlist, WatchlistEntry } from '../domain/watchlist.js';
 import { HttpError } from '../errors/http-error.js';
 import { MarketGroupRepository } from '../persistence/market-group-repository.js';
@@ -33,6 +33,7 @@ export class BackupService {
       userData: {
         marketGroups,
         providerKeys,
+        dateFormat: settings.dateFormat,
         selectedWatchlistId: settings.selectedWatchlistId,
         theme: settings.theme,
         watchlists,
@@ -59,6 +60,8 @@ export class BackupService {
       backup.userData.theme,
       selectedWatchlistId,
       providerCredentials,
+      120,
+      backup.userData.dateFormat,
     );
   }
 
@@ -110,6 +113,7 @@ function parseBackup(value: unknown): BackupDocument {
     userData: {
       marketGroups: readMarketGroups(userData.marketGroups),
       providerKeys: readProviderKeys(userData.providerKeys),
+      dateFormat: readDateFormat(userData.dateFormat),
       selectedWatchlistId: readNullableIdentifier(userData.selectedWatchlistId, 'Selected watchlist ID'),
       theme: readTheme(userData.theme),
       watchlists: readWatchlists(userData.watchlists),
@@ -178,6 +182,18 @@ function readTheme(value: unknown): ThemePreference {
   }
 
   throw new HttpError(400, 'Backup theme is invalid.');
+}
+
+function readDateFormat(value: unknown): DateFormat {
+  if (value === undefined) {
+    return 'mm/dd/yyyy';
+  }
+
+  if (value === 'dd/mm/yyyy' || value === 'mm/dd/yyyy') {
+    return value;
+  }
+
+  throw new HttpError(400, 'Backup date format is invalid.');
 }
 
 function readWatchlists(value: unknown): Watchlist[] {

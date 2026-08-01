@@ -36,6 +36,7 @@ export function registerSettingsRoutes(
 
     return {
       configuredProviders: Object.keys(settings.providerCredentials).sort(),
+      dateFormat: settings.dateFormat,
       quoteRefreshIntervalSeconds: settings.quoteRefreshIntervalSeconds,
       selectedWatchlistId: settings.selectedWatchlistId,
       theme: settings.theme,
@@ -62,6 +63,13 @@ export function registerSettingsRoutes(
     const theme = readTheme(request.body);
 
     await users.setTheme(user.id, theme);
+
+    return reply.code(204).send();
+  });
+
+  server.put('/api/settings/date-format', async (request, reply) => {
+    const user = await auth.requireCurrentUser(request);
+    await users.setDateFormat(user.id, readDateFormat(request.body));
 
     return reply.code(204).send();
   });
@@ -111,6 +119,20 @@ function readTheme(body: unknown): 'dark' | 'light' | 'system' {
   }
 
   throw new HttpError(400, 'Theme is invalid.');
+}
+
+function readDateFormat(body: unknown): 'dd/mm/yyyy' | 'mm/dd/yyyy' {
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+    throw new HttpError(400, 'Date format is required.');
+  }
+
+  const dateFormat = (body as { dateFormat?: unknown }).dateFormat;
+
+  if (dateFormat === 'dd/mm/yyyy' || dateFormat === 'mm/dd/yyyy') {
+    return dateFormat;
+  }
+
+  throw new HttpError(400, 'Date format is invalid.');
 }
 
 function readQuoteRefreshInterval(body: unknown): number {

@@ -21,10 +21,14 @@ export interface CompanyProfile {
 
 export interface EarningsRecord {
   actualEarningsPerShare: number | null;
+  actualRevenue: number | null;
   estimatedEarningsPerShare: number | null;
+  estimatedRevenue: number | null;
+  quarter: number | null;
   releaseDate: string;
   releaseTime: string | null;
   surprisePercent: number | null;
+  year: number | null;
 }
 
 export interface EarningsCalendarEntry {
@@ -40,10 +44,14 @@ export interface EarningsCalendarEntry {
 
 export interface FinnhubEarningsCalendarEntry {
   actualEarningsPerShare: number | null;
+  actualRevenue: number | null;
   estimatedEarningsPerShare: number | null;
+  estimatedRevenue: number | null;
+  quarter: number | null;
   releaseDate: string;
   releaseTime: string | null;
   symbol: string;
+  year: number | null;
 }
 
 export interface InstrumentSearchResult {

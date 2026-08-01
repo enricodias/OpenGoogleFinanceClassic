@@ -42,9 +42,11 @@ const marketGroups: MarketGroup[] = [{
 describe('BackupService', () => {
   it('exports plain provider keys and encrypts them again when restoring', async () => {
     const settings: UserSettings = {
+      dateFormat: 'dd/mm/yyyy',
       providerCredentials: {
         finnhub: cipher.encrypt(userId, 'finnhub', 'finnhub-key'),
       },
+      quoteRefreshIntervalSeconds: 120,
       selectedWatchlistId: watchlist.id,
       theme: 'dark',
       userId,
@@ -64,6 +66,7 @@ describe('BackupService', () => {
     const backups = new BackupService(users, watchlists, groups, cipher);
 
     const backup = await backups.create(userId);
+    expect(backup.userData.dateFormat).toBe('dd/mm/yyyy');
     expect(backup.userData.providerKeys).toEqual({ finnhub: 'finnhub-key' });
 
     backup.userData.providerKeys = {

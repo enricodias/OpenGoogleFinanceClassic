@@ -25,6 +25,7 @@ import {
   formatPercent,
   formatRelativeTime,
 } from './format';
+import './earnings.css';
 import { instrumentColorStyle } from './instrument-color';
 
 type View =
@@ -34,6 +35,7 @@ type View =
 interface InstrumentData {
   chart: CachedResult<ChartPoint[]> | null;
   earnings: CachedResult<EarningsRecord[]> | null;
+  upcomingEarnings: CachedResult<EarningsCalendarEntry[]> | null;
   news: CachedResult<NewsArticle[]> | null;
   profile: CachedResult<CompanyProfile> | null;
   quote: CachedResult<MarketQuote> | null;
@@ -42,6 +44,7 @@ interface InstrumentData {
 const EMPTY_INSTRUMENT_DATA: InstrumentData = {
   chart: null,
   earnings: null,
+  upcomingEarnings: null,
   news: null,
   profile: null,
   quote: null,
@@ -270,6 +273,7 @@ function FinanceApplication({ session, onSessionChanged }: {
 
       {view.kind === 'home' ? (
         <Dashboard
+          dateFormat={settings?.dateFormat ?? 'mm/dd/yyyy'}
           home={home}
           onCreateWatchlist={() => setCreateWatchlistOpen(true)}
           onDeleteWatchlist={(watchlist) => setDeleteWatchlistTarget(watchlist)}
@@ -282,6 +286,7 @@ function FinanceApplication({ session, onSessionChanged }: {
         />
       ) : (
         <InstrumentView
+          dateFormat={settings?.dateFormat ?? 'mm/dd/yyyy'}
           instrument={view.instrument}
           onBack={() => setView({ kind: 'home' })}
           onChanged={loadDashboard}
@@ -341,7 +346,8 @@ function FinanceApplication({ session, onSessionChanged }: {
   );
 }
 
-function Dashboard({ home, onCreateWatchlist, onDeleteWatchlist, onEditMarketGroups, onOpenInstrument, onRenameWatchlist, onRemoveWatchlistEntry, onSelectWatchlist, watchlists }: {
+function Dashboard({ dateFormat, home, onCreateWatchlist, onDeleteWatchlist, onEditMarketGroups, onOpenInstrument, onRenameWatchlist, onRemoveWatchlistEntry, onSelectWatchlist, watchlists }: {
+  dateFormat: Settings['dateFormat'];
   home: HomeData | null;
   onCreateWatchlist: () => void;
   onDeleteWatchlist: (watchlist: Watchlist) => void;
@@ -406,7 +412,7 @@ function Dashboard({ home, onCreateWatchlist, onDeleteWatchlist, onEditMarketGro
           <section className="card">
             <h2>Earnings calendar</h2>
             <p className="muted">Upcoming releases</p>
-            <EarningsList earnings={home.earningsCalendar?.data ?? []} />
+            <EarningsList dateFormat={dateFormat} earnings={home.earningsCalendar?.data ?? []} />
           </section>
         </aside>
       </div>
@@ -486,7 +492,7 @@ function NewsList({ news }: { news: NewsArticle[] }) {
   );
 }
 
-function EarningsList({ earnings }: { earnings: EarningsCalendarEntry[] }) {
+function EarningsList({ dateFormat, earnings }: { dateFormat: Settings['dateFormat']; earnings: EarningsCalendarEntry[] }) {
   if (earnings.length === 0) {
     return <p className="muted">No earnings data available.</p>;
   }
@@ -495,7 +501,7 @@ function EarningsList({ earnings }: { earnings: EarningsCalendarEntry[] }) {
     <div className="earnings-list">
       {earnings.map((entry) => (
         <div className="earnings-item" key={`${entry.symbol}-${entry.releaseDate}`}>
-          <span className="date-box"><small>{entry.releaseDate.slice(5, 7)}</small>{entry.releaseDate.slice(8, 10)}</span>
+          <span className="date-box"><small>{formatReleaseDate(entry.releaseDate, dateFormat, 'month')}</small>{formatReleaseDate(entry.releaseDate, dateFormat, 'day')}</span>
           <span><strong>{entry.name}</strong><small>{entry.symbol} · {entry.releaseTime ?? 'Time TBA'}</small></span>
         </div>
       ))}
@@ -742,6 +748,23 @@ function SettingsPanel({ onClose, onUpdated, settings }: {
     }
   }
 
+  async function updateDateFormat(dateFormat: Settings['dateFormat']): Promise<void> {
+    try {
+      setPending(true);
+      setMessage(null);
+      await api<void>('/api/settings/date-format', {
+        body: JSON.stringify({ dateFormat }),
+        method: 'PUT',
+      });
+      onUpdated();
+      setMessage('Date format saved.');
+    } catch (requestError) {
+      setMessage(errorMessage(requestError));
+    } finally {
+      setPending(false);
+    }
+  }
+
   async function updateQuoteRefreshIntervalSeconds(seconds: number): Promise<void> {
     try {
       setPending(true);
@@ -825,6 +848,15 @@ function SettingsPanel({ onClose, onUpdated, settings }: {
               <option value={120}>120 seconds</option>
               <option value={300}>5 minutes</option>
               <option value={600}>10 minutes</option>
+            </select>
+          </label>
+        </section>
+        <section className="stack">
+          <h3>Date format</h3>
+          <label className="settings-select">Display dates as
+            <select aria-label="Date format" disabled={pending} onChange={(event) => void updateDateFormat(event.target.value as Settings['dateFormat'])} value={settings?.dateFormat ?? 'mm/dd/yyyy'}>
+              <option value="dd/mm/yyyy">DD/MM/YYYY</option>
+              <option value="mm/dd/yyyy">MM/DD/YYYY</option>
             </select>
           </label>
         </section>
@@ -957,7 +989,8 @@ function MarketGroupsPanel({ groups: initialGroups, onClose, onUpdated }: {
   );
 }
 
-function InstrumentView({ instrument, onBack, onChanged, watchlists }: {
+function InstrumentView({ dateFormat, instrument, onBack, onChanged, watchlists }: {
+  dateFormat: Settings['dateFormat'];
   instrument: InstrumentReference;
   onBack: () => void;
   onChanged: () => Promise<void>;
@@ -983,14 +1016,16 @@ function InstrumentView({ instrument, onBack, onChanged, watchlists }: {
           api<CachedResult<ChartPoint[]>>(`/api/market/chart?symbol=${encodeURIComponent(instrument.symbol)}&interval=${details.interval}&outputsize=${details.outputsize}`),
           api<CachedResult<CompanyProfile>>(`/api/market/profile?symbol=${encodeURIComponent(instrument.symbol)}`),
           api<CachedResult<EarningsRecord[]>>(`/api/market/earnings?symbol=${encodeURIComponent(instrument.symbol)}`),
+          api<CachedResult<EarningsCalendarEntry[]>>(`/api/market/earnings-calendar?symbol=${encodeURIComponent(instrument.symbol)}&from=${daysAgo(31)}&to=${daysFromToday(90)}`),
           api<CachedResult<NewsArticle[]>>(`/api/market/company-news?symbol=${encodeURIComponent(instrument.symbol)}`),
         ]);
         setData({
           chart: resultValue(results[1]),
           earnings: resultValue(results[3]),
-          news: resultValue(results[4]),
+          news: resultValue(results[5]),
           profile: resultValue(results[2]),
           quote: resultValue(results[0]),
+          upcomingEarnings: resultValue(results[4]),
         });
         const rejectedResult = results.find((result) => result.status === 'rejected');
         setError(rejectedResult === undefined ? null : errorMessage(rejectedResult.reason));
@@ -1059,7 +1094,7 @@ function InstrumentView({ instrument, onBack, onChanged, watchlists }: {
       </div>
       <div className="details-grid">
         <section className="card about-card"><h2>About</h2><p>{profile?.description ?? 'Company profile information is unavailable for this instrument.'}</p><p className="muted">{[profile?.sector, profile?.industry].filter((item) => item !== null).join(' · ')}</p>{profile?.website === null || profile?.website === undefined ? null : <a href={profile.website} rel="noreferrer" target="_blank">Visit website</a>}</section>
-        <section className="card"><h2>Earnings</h2><EarningsHistory earnings={data.earnings?.data ?? []} /></section>
+        <section className="card"><h2>Earnings</h2><UpcomingEarnings dateFormat={dateFormat} earnings={data.upcomingEarnings?.data ?? []} /><EarningsHistory calendar={data.upcomingEarnings?.data ?? []} dateFormat={dateFormat} earnings={data.earnings?.data ?? []} /></section>
       </div>
       <section className="content-section"><div className="section-heading"><h2>In the news</h2></div><NewsList news={data.news?.data ?? []} /></section>
     </section>
@@ -1081,12 +1116,108 @@ function chartRange(range: string): { interval: string; outputsize: number } {
   return RANGE_OPTIONS[range] ?? DEFAULT_RANGE;
 }
 
-function EarningsHistory({ earnings }: { earnings: EarningsRecord[] }) {
+function UpcomingEarnings({ dateFormat, earnings }: { dateFormat: Settings['dateFormat']; earnings: EarningsCalendarEntry[] }) {
+  const nextRelease = earnings.filter((entry) => entry.releaseDate >= today()).sort((left, right) => left.releaseDate.localeCompare(right.releaseDate))[0];
+
+  if (nextRelease === undefined) {
+    return null;
+  }
+
+  return <div className="upcoming-earnings"><small>Upcoming release</small><strong>{formatReleaseDate(nextRelease.releaseDate, dateFormat)}{nextRelease.releaseTime === null ? '' : ` · ${nextRelease.releaseTime}`}</strong></div>;
+}
+
+function EarningsHistory({ calendar, dateFormat, earnings }: { calendar: EarningsCalendarEntry[]; dateFormat: Settings['dateFormat']; earnings: EarningsRecord[] }) {
   if (earnings.length === 0) {
     return <p className="muted">No earnings history available.</p>;
   }
 
-  return <div className="earnings-history">{earnings.slice(0, 5).map((entry) => <div key={entry.releaseDate}><span>{entry.releaseDate}</span><strong>{entry.actualEarningsPerShare === null ? '—' : entry.actualEarningsPerShare.toFixed(2)} EPS</strong><small>Estimate {entry.estimatedEarningsPerShare === null ? '—' : entry.estimatedEarningsPerShare.toFixed(2)}</small></div>)}</div>;
+  const calendarByPeriod = new Map(calendar.flatMap((entry) => {
+    const key = fiscalPeriodKey(entry.year, entry.quarter);
+
+    return key === null ? [] : [[key, entry] as const];
+  }));
+
+  return <div className="earnings-history">{earnings.slice(0, 5).map((entry) => {
+    const key = fiscalPeriodKey(entry.year, entry.quarter);
+    const calendarEntry = key === null ? undefined : calendarByPeriod.get(key);
+    const date = calendarEntry?.releaseDate ?? entry.releaseDate;
+    const dateLabel = calendarEntry === undefined ? 'Period ended' : 'Released';
+
+    return <div className="earnings-history-item" key={entry.releaseDate}><span><small>{dateLabel}</small>{formatReleaseDate(date, dateFormat)}</span><EarningsMetric actual={entry.actualEarningsPerShare} estimate={entry.estimatedEarningsPerShare} label="EPS / Est." formatter={formatEarningsPerShare} /><EarningsMetric actual={calendarEntry?.actualRevenue ?? entry.actualRevenue} estimate={calendarEntry?.estimatedRevenue ?? entry.estimatedRevenue} label="Revenue / Est." formatter={formatRevenue} /></div>;
+  })}</div>;
+}
+
+function fiscalPeriodKey(year: number | null | undefined, quarter: number | null | undefined): string | null {
+  if (!isFiniteNumber(year) || !isFiniteNumber(quarter)) {
+    return null;
+  }
+
+  return `${year}-${quarter}`;
+}
+
+function EarningsMetric({ actual, estimate, formatter, label }: { actual: number | null | undefined; estimate: number | null | undefined; formatter: (value: number | null | undefined) => string; label: string }) {
+  const surprise = earningsSurprise(actual, estimate);
+
+  return <div className="earnings-metric"><small>{label}</small><strong>{formatter(actual)} / {formatter(estimate)}</strong>{surprise === null ? null : <span className={surprise.positive ? 'positive' : 'negative'}>{surprise.positive ? '↑' : '↓'} {surprise.text} {surprise.positive ? 'beat' : 'miss'}</span>}</div>;
+}
+
+function earningsSurprise(actual: number | null | undefined, estimate: number | null | undefined): { positive: boolean; text: string } | null {
+  if (!isFiniteNumber(actual) || !isFiniteNumber(estimate) || estimate === 0) {
+    return null;
+  }
+
+  const percent = ((actual - estimate) / Math.abs(estimate)) * 100;
+  return { positive: percent >= 0, text: `${percent >= 0 ? '+' : ''}${percent.toFixed(2)}%` };
+}
+
+function formatEarningsPerShare(value: number | null | undefined): string {
+  return !isFiniteNumber(value) ? '—' : `$${value.toFixed(2)}`;
+}
+
+function formatRevenue(value: number | null | undefined): string {
+  if (!isFiniteNumber(value)) {
+    return '—';
+  }
+
+  if (Math.abs(value) >= 1_000_000_000) {
+    return `${(value / 1_000_000_000).toFixed(2)}B`;
+  }
+
+  return `${(value / 1_000_000).toFixed(2)}M`;
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function formatReleaseDate(value: string, format: Settings['dateFormat'], part?: 'day' | 'month'): string {
+  const [year = '', month = '', day = ''] = value.split('-');
+
+  if (part === 'day') {
+    return format === 'dd/mm/yyyy' ? day : month;
+  }
+
+  if (part === 'month') {
+    return format === 'dd/mm/yyyy' ? month : day;
+  }
+
+  return format === 'dd/mm/yyyy' ? `${day}/${month}/${year}` : `${month}/${day}/${year}`;
+}
+
+function today(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function daysFromToday(days: number): string {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function daysAgo(days: number): string {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() - days);
+  return date.toISOString().slice(0, 10);
 }
 
 function Fact({ label, value }: { label: string; value: string }) {
