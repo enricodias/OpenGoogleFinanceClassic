@@ -1,4 +1,4 @@
-import type { EarningsRecord, FinnhubEarningsCalendarEntry, NewsArticle } from '../domain/market.js';
+import type { CompanySnapshot, EarningsRecord, FinnhubEarningsCalendarEntry, NewsArticle } from '../domain/market.js';
 import { ProviderError } from '../errors/provider-error.js';
 import { ProviderClient } from './provider-client.js';
 
@@ -8,13 +8,22 @@ export class FinnhubClient extends ProviderClient {
     baseUrl: string,
     requestTimeoutMs: number,
   ) {
-    super(baseUrl, requestTimeoutMs);
+    super('Finnhub', baseUrl, requestTimeoutMs);
   }
 
   public async getCompanyNews(symbol: string, from: string, to: string): Promise<NewsArticle[]> {
     const payload = await this.request('/company-news', { from, symbol, to });
 
     return this.toNewsArticles(payload);
+  }
+
+  public async getCompanyProfile(symbol: string): Promise<CompanySnapshot> {
+    const payload = readObject(await this.request('/stock/profile2', { symbol }));
+
+    return {
+      marketCapitalization: readOptionalNumber(payload.marketCapitalization),
+      website: readOptionalString(payload.weburl),
+    };
   }
 
   public async getEarningsCalendar(

@@ -2,6 +2,7 @@ import { ProviderError } from '../errors/provider-error.js';
 
 export abstract class ProviderClient {
   protected constructor(
+    private readonly providerName: string,
     private readonly baseUrl: string,
     private readonly requestTimeoutMs: number,
   ) {}
@@ -20,29 +21,36 @@ export abstract class ProviderClient {
         signal: AbortSignal.timeout(this.requestTimeoutMs),
       });
     } catch {
-      throw new ProviderError('unavailable', 'The market-data provider could not be reached.');
+      throw new ProviderError('unavailable', `${this.providerName} could not be reached.`);
     }
 
-    if (response.status === 401 || response.status === 403) {
-      throw new ProviderError('invalid-credential', 'The configured provider credential was rejected.');
+    if (response.status === 401) {
+      throw new ProviderError('invalid-credential', `${this.providerName} rejected the configured API key.`);
+    }
+
+    if (response.status === 403) {
+      throw new ProviderError(
+        'unavailable',
+        `${this.providerName} denied a request. Check that the API key and plan include the endpoints used in this page.`,
+      );
     }
 
     if (response.status === 404) {
-      throw new ProviderError('not-found', 'The requested market data could not be found.');
+      throw new ProviderError('not-found', `${this.providerName} could not find the requested market data.`);
     }
 
     if (response.status === 429) {
-      throw new ProviderError('rate-limited', 'The provider rate limit has been reached.');
+      throw new ProviderError('rate-limited', `${this.providerName} rate limit has been reached.`);
     }
 
     if (!response.ok) {
-      throw new ProviderError('unavailable', 'The market-data provider returned an unexpected response.');
+      throw new ProviderError('unavailable', `${this.providerName} returned an unexpected response.`);
     }
 
     try {
       return await response.json();
     } catch {
-      throw new ProviderError('unavailable', 'The market-data provider returned invalid data.');
+      throw new ProviderError('unavailable', `${this.providerName} returned invalid data.`);
     }
   }
 }

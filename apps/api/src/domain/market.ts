@@ -7,15 +7,8 @@ export interface ChartPoint {
   volume: number | null;
 }
 
-export interface CompanyProfile {
-  currency: string | null;
-  description: string | null;
-  exchange: string | null;
-  industry: string | null;
+export interface CompanySnapshot {
   marketCapitalization: number | null;
-  name: string;
-  sector: string | null;
-  symbol: string;
   website: string | null;
 }
 

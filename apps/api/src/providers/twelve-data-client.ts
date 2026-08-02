@@ -1,6 +1,5 @@
 import type {
   ChartPoint,
-  CompanyProfile,
   InstrumentSearchResult,
   MarketQuote,
 } from '../domain/market.js';
@@ -13,7 +12,7 @@ export class TwelveDataClient extends ProviderClient {
     baseUrl: string,
     requestTimeoutMs: number,
   ) {
-    super(baseUrl, requestTimeoutMs);
+    super('Twelve Data', baseUrl, requestTimeoutMs);
   }
 
   public async getChart(symbol: string, interval: string, outputsize: number): Promise<ChartPoint[]> {
@@ -36,22 +35,6 @@ export class TwelveDataClient extends ProviderClient {
         volume: readOptionalNumber(point.volume),
       };
     }).reverse();
-  }
-
-  public async getProfile(symbol: string): Promise<CompanyProfile> {
-    const payload = this.readPayload(await this.request('/profile', { symbol }));
-
-    return {
-      currency: readOptionalString(payload.currency),
-      description: readOptionalString(payload.description),
-      exchange: readOptionalString(payload.exchange),
-      industry: readOptionalString(payload.industry),
-      marketCapitalization: readOptionalNumber(payload.market_capitalization),
-      name: readRequiredString(payload.name, 'profile name'),
-      sector: readOptionalString(payload.sector),
-      symbol: readRequiredString(payload.symbol, 'profile symbol'),
-      website: readOptionalString(payload.website),
-    };
   }
 
   public async getQuote(symbol: string): Promise<MarketQuote> {

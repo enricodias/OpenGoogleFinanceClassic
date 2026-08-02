@@ -41,6 +41,13 @@ export function registerMarketDataRoutes(
     return withProviderError(() => marketData.getQuote(user.id, symbol));
   });
 
+  server.get('/api/market/company-profile', async (request) => {
+    const user = await auth.requireCurrentUser(request);
+    const symbol = readQueryString(request.query, 'symbol');
+
+    return withProviderError(() => marketData.getCompanyProfile(user.id, symbol));
+  });
+
   server.get('/api/market/chart', async (request) => {
     const user = await auth.requireCurrentUser(request);
     const symbol = readQueryString(request.query, 'symbol');
@@ -48,13 +55,6 @@ export function registerMarketDataRoutes(
     const outputsize = readOutputsize(request.query);
 
     return withProviderError(() => marketData.getChart(user.id, symbol, interval, outputsize));
-  });
-
-  server.get('/api/market/profile', async (request) => {
-    const user = await auth.requireCurrentUser(request);
-    const symbol = readQueryString(request.query, 'symbol');
-
-    return withProviderError(() => marketData.getProfile(user.id, symbol));
   });
 
   server.get('/api/market/earnings', async (request) => {

@@ -1,4 +1,4 @@
-import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from 'react';
+import { type ChangeEvent, type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 
 import {
   api,
@@ -7,7 +7,7 @@ import {
   type BackupDocument,
   type CachedResult,
   type ChartPoint,
-  type CompanyProfile,
+  type CompanySnapshot,
   type EarningsCalendarEntry,
   type EarningsRecord,
   type HomeData,
@@ -35,18 +35,18 @@ type View =
 interface InstrumentData {
   chart: CachedResult<ChartPoint[]> | null;
   earnings: CachedResult<EarningsRecord[]> | null;
+  companyProfile: CachedResult<CompanySnapshot> | null;
   upcomingEarnings: CachedResult<EarningsCalendarEntry[]> | null;
   news: CachedResult<NewsArticle[]> | null;
-  profile: CachedResult<CompanyProfile> | null;
   quote: CachedResult<MarketQuote> | null;
 }
 
 const EMPTY_INSTRUMENT_DATA: InstrumentData = {
   chart: null,
   earnings: null,
+  companyProfile: null,
   upcomingEarnings: null,
   news: null,
-  profile: null,
   quote: null,
 };
 
@@ -1014,16 +1014,16 @@ function InstrumentView({ dateFormat, instrument, onBack, onChanged, watchlists 
         const results = await Promise.allSettled([
           api<CachedResult<MarketQuote>>(`/api/market/quote?symbol=${encodeURIComponent(instrument.symbol)}`),
           api<CachedResult<ChartPoint[]>>(`/api/market/chart?symbol=${encodeURIComponent(instrument.symbol)}&interval=${details.interval}&outputsize=${details.outputsize}`),
-          api<CachedResult<CompanyProfile>>(`/api/market/profile?symbol=${encodeURIComponent(instrument.symbol)}`),
+          api<CachedResult<CompanySnapshot>>(`/api/market/company-profile?symbol=${encodeURIComponent(instrument.symbol)}`),
           api<CachedResult<EarningsRecord[]>>(`/api/market/earnings?symbol=${encodeURIComponent(instrument.symbol)}`),
           api<CachedResult<EarningsCalendarEntry[]>>(`/api/market/earnings-calendar?symbol=${encodeURIComponent(instrument.symbol)}&from=${daysAgo(31)}&to=${daysFromToday(90)}`),
           api<CachedResult<NewsArticle[]>>(`/api/market/company-news?symbol=${encodeURIComponent(instrument.symbol)}`),
         ]);
         setData({
           chart: resultValue(results[1]),
+          companyProfile: resultValue(results[2]),
           earnings: resultValue(results[3]),
           news: resultValue(results[5]),
-          profile: resultValue(results[2]),
           quote: resultValue(results[0]),
           upcomingEarnings: resultValue(results[4]),
         });
@@ -1061,7 +1061,7 @@ function InstrumentView({ dateFormat, instrument, onBack, onChanged, watchlists 
   }
 
   const quote = data.quote?.data;
-  const profile = data.profile?.data;
+  const companyProfile = data.companyProfile?.data;
   const positive = (quote?.percentChange ?? 0) >= 0;
   const selectedWatchlist = watchlists.find((watchlist) => watchlist.id === watchlistId);
   const isAdded = addedWatchlistIds.has(watchlistId) || selectedWatchlist?.entries.some((entry) => (
@@ -1087,16 +1087,16 @@ function InstrumentView({ dateFormat, instrument, onBack, onChanged, watchlists 
           <Fact label="Previous close" value={formatCurrency(quote?.previousClose ?? null, quote?.currency ?? 'USD')} />
           <Fact label="Day range" value={`${formatCurrency(quote?.dayLow ?? null, quote?.currency ?? 'USD')} – ${formatCurrency(quote?.dayHigh ?? null, quote?.currency ?? 'USD')}`} />
           <Fact label="52-week range" value={`${formatCurrency(quote?.week52Low ?? null, quote?.currency ?? 'USD')} – ${formatCurrency(quote?.week52High ?? null, quote?.currency ?? 'USD')}`} />
-          <Fact label="Market cap" value={formatCompactNumber(quote?.marketCapitalization ?? profile?.marketCapitalization ?? null)} />
+          <Fact label="Market cap" value={formatCompactNumber(companyProfile?.marketCapitalization ?? quote?.marketCapitalization ?? null)} />
           <Fact label="Volume" value={formatCompactNumber(quote?.volume ?? null)} />
-          <Fact label="Exchange" value={quote?.exchange ?? profile?.exchange ?? '—'} />
+          <Fact label="Exchange" value={quote?.exchange ?? '—'} />
+          <Fact label="Website" value={companyProfile?.website === null || companyProfile?.website === undefined ? '—' : <a href={companyProfile.website} rel="noreferrer" target="_blank">{companyProfile.website}</a>} />
         </aside>
       </div>
       <div className="details-grid">
-        <section className="card about-card"><h2>About</h2><p>{profile?.description ?? 'Company profile information is unavailable for this instrument.'}</p><p className="muted">{[profile?.sector, profile?.industry].filter((item) => item !== null).join(' · ')}</p>{profile?.website === null || profile?.website === undefined ? null : <a href={profile.website} rel="noreferrer" target="_blank">Visit website</a>}</section>
+        <section className="card"><h2>In the news</h2><NewsList news={data.news?.data ?? []} /></section>
         <section className="card"><h2>Earnings</h2><UpcomingEarnings dateFormat={dateFormat} earnings={data.upcomingEarnings?.data ?? []} /><EarningsHistory calendar={data.upcomingEarnings?.data ?? []} dateFormat={dateFormat} earnings={data.earnings?.data ?? []} /></section>
       </div>
-      <section className="content-section"><div className="section-heading"><h2>In the news</h2></div><NewsList news={data.news?.data ?? []} /></section>
     </section>
   );
 }
@@ -1220,7 +1220,7 @@ function daysAgo(days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-function Fact({ label, value }: { label: string; value: string }) {
+function Fact({ label, value }: { label: string; value: ReactNode }) {
   return <div className="fact"><span>{label}</span><strong>{value}</strong></div>;
 }
 

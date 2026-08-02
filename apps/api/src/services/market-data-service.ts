@@ -1,6 +1,6 @@
 import type {
   ChartPoint,
-  CompanyProfile,
+  CompanySnapshot,
   EarningsRecord,
   FinnhubEarningsCalendarEntry,
   InstrumentSearchResult,
@@ -105,15 +105,15 @@ export class MarketDataService {
     );
   }
 
-  public async getProfile(userId: string, symbol: string): Promise<CachedResult<CompanyProfile>> {
-    const client = await this.twelveDataClient(userId);
+  public async getCompanyProfile(userId: string, symbol: string): Promise<CachedResult<CompanySnapshot>> {
+    const client = await this.finnhubClient(userId);
 
     return this.cache.getOrLoad(
-      'twelve-data:profile',
+      'finnhub:company-profile',
       { symbol },
       86400,
-      604800,
-      async () => client.getProfile(symbol),
+      86400,
+      async () => client.getCompanyProfile(symbol),
     );
   }
 
