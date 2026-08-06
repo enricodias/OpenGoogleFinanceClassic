@@ -150,7 +150,7 @@ export class UserRepository {
     selectedWatchlistId: string | null,
     providerCredentials: Record<string, EncryptedSecret>,
     quoteRefreshIntervalSeconds = 120,
-    dateFormat: DateFormat = 'mm/dd/yyyy',
+    dateFormat: DateFormat = 'dd/mm/yyyy',
   ): Promise<void> {
     await setJson(this.client, this.settingsKey(userId), '$', {
       dateFormat,
@@ -185,7 +185,7 @@ export class UserRepository {
 
   private defaultSettings(userId: string): UserSettings {
     return {
-      dateFormat: 'mm/dd/yyyy',
+      dateFormat: 'dd/mm/yyyy',
       providerCredentials: {},
       quoteRefreshIntervalSeconds: 120,
       selectedWatchlistId: null,

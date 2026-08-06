@@ -273,7 +273,7 @@ function FinanceApplication({ session, onSessionChanged }: {
 
       {view.kind === 'home' ? (
         <Dashboard
-          dateFormat={settings?.dateFormat ?? 'mm/dd/yyyy'}
+          dateFormat={settings?.dateFormat ?? 'dd/mm/yyyy'}
           home={home}
           onCreateWatchlist={() => setCreateWatchlistOpen(true)}
           onDeleteWatchlist={(watchlist) => setDeleteWatchlistTarget(watchlist)}
@@ -286,7 +286,7 @@ function FinanceApplication({ session, onSessionChanged }: {
         />
       ) : (
         <InstrumentView
-          dateFormat={settings?.dateFormat ?? 'mm/dd/yyyy'}
+          dateFormat={settings?.dateFormat ?? 'dd/mm/yyyy'}
           instrument={view.instrument}
           onBack={() => setView({ kind: 'home' })}
           onChanged={loadDashboard}
@@ -858,7 +858,7 @@ function SettingsPanel({ onClose, onUpdated, settings }: {
         <section className="stack">
           <h3>Date format</h3>
           <label className="settings-select">Display dates as
-            <select aria-label="Date format" disabled={pending} onChange={(event) => void updateDateFormat(event.target.value as Settings['dateFormat'])} value={settings?.dateFormat ?? 'mm/dd/yyyy'}>
+            <select aria-label="Date format" disabled={pending} onChange={(event) => void updateDateFormat(event.target.value as Settings['dateFormat'])} value={settings?.dateFormat ?? 'dd/mm/yyyy'}>
               <option value="dd/mm/yyyy">DD/MM/YYYY</option>
               <option value="mm/dd/yyyy">MM/DD/YYYY</option>
             </select>
