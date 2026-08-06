@@ -5,6 +5,7 @@ export interface AppConfig {
   allowRegistration: boolean;
   encryptionKey: Buffer;
   finnhubBaseUrl: string;
+  logoDevBaseUrl: string;
   nodeEnvironment: string;
   port: number;
   providerRequestTimeoutMs: number;
@@ -47,6 +48,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
     allowRegistration: environment.ALLOW_REGISTRATION === 'true',
     encryptionKey,
     finnhubBaseUrl: environment.FINNHUB_BASE_URL ?? 'https://finnhub.io/api/v1',
+    logoDevBaseUrl: environment.LOGO_DEV_BASE_URL ?? 'https://api.logo.dev',
     nodeEnvironment: environment.NODE_ENV ?? 'development',
     port,
     providerRequestTimeoutMs,

@@ -48,6 +48,13 @@ export function registerMarketDataRoutes(
     return withProviderError(() => marketData.getCompanyProfile(user.id, symbol));
   });
 
+  server.get('/api/market/brand-color', async (request) => {
+    const user = await auth.requireCurrentUser(request);
+    const symbol = readQueryString(request.query, 'symbol');
+
+    return withProviderError(() => marketData.getBrandColor(user.id, symbol));
+  });
+
   server.get('/api/market/chart', async (request) => {
     const user = await auth.requireCurrentUser(request);
     const symbol = readQueryString(request.query, 'symbol');

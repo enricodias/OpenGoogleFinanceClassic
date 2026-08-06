@@ -1,48 +1,69 @@
-import type { CSSProperties } from 'react';
+import { type CSSProperties, useEffect, useState } from 'react';
 
-import type { InstrumentReference } from './api';
+import { api, type BrandColor, type CachedResult, type InstrumentReference } from './api';
 
 interface InstrumentColor {
   background: string;
   foreground: string;
 }
 
-const BRAND_COLORS: Record<string, InstrumentColor> = {
-  AAPL: { background: '#4b5563', foreground: '#ffffff' },
-  AMZN: { background: '#ff9900', foreground: '#1f2937' },
-  GOOGL: { background: '#4285f4', foreground: '#ffffff' },
-  GOOG: { background: '#4285f4', foreground: '#ffffff' },
-  META: { background: '#0866ff', foreground: '#ffffff' },
-  MSFT: { background: '#107c10', foreground: '#ffffff' },
-  NFLX: { background: '#e50914', foreground: '#ffffff' },
-  NVDA: { background: '#76b900', foreground: '#172b00' },
-  SNDK: { background: '#e31837', foreground: '#ffffff' },
-  TSLA: { background: '#cc0000', foreground: '#ffffff' },
-};
+const DEFAULT_COLOR: InstrumentColor = { background: '#3c4043', foreground: '#ffffff' };
 
-const FALLBACK_COLORS: InstrumentColor[] = [
-  { background: '#1967d2', foreground: '#ffffff' },
-  { background: '#00897b', foreground: '#ffffff' },
-  { background: '#7b1fa2', foreground: '#ffffff' },
-  { background: '#c45a00', foreground: '#ffffff' },
-  { background: '#5f6368', foreground: '#ffffff' },
-  { background: '#0086c9', foreground: '#ffffff' },
-];
+const colorCache = new Map<string, InstrumentColor>();
+const colorRequests = new Map<string, Promise<InstrumentColor>>();
 
-export function instrumentColor(instrument: Pick<InstrumentReference, 'symbol'>): InstrumentColor {
-  const symbol = instrument.symbol.toUpperCase();
-  const brandedColor = BRAND_COLORS[symbol];
+function fetchInstrumentColor(symbol: string): Promise<InstrumentColor> {
+  const cached = colorCache.get(symbol);
 
-  if (brandedColor !== undefined) {
-    return brandedColor;
+  if (cached !== undefined) {
+    return Promise.resolve(cached);
   }
 
-  const hash = [...symbol].reduce((value, character) => ((value * 31) + character.charCodeAt(0)) >>> 0, 0);
-  return FALLBACK_COLORS[hash % FALLBACK_COLORS.length]!;
+  const inflight = colorRequests.get(symbol);
+
+  if (inflight !== undefined) {
+    return inflight;
+  }
+
+  const request = api<CachedResult<BrandColor>>(`/api/market/brand-color?symbol=${encodeURIComponent(symbol)}`)
+    .then((result): InstrumentColor => ({ background: result.data.background, foreground: result.data.foreground }))
+    .catch(() => DEFAULT_COLOR)
+    .then((color) => {
+      colorCache.set(symbol, color);
+      colorRequests.delete(symbol);
+
+      return color;
+    });
+
+  colorRequests.set(symbol, request);
+
+  return request;
 }
 
-export function instrumentColorStyle(instrument: Pick<InstrumentReference, 'symbol'>): CSSProperties {
-  const color = instrumentColor(instrument);
+export function useInstrumentColor(instrument: Pick<InstrumentReference, 'symbol'>): InstrumentColor {
+  const symbol = instrument.symbol.toUpperCase();
+  const [color, setColor] = useState<InstrumentColor>(() => colorCache.get(symbol) ?? DEFAULT_COLOR);
+
+  useEffect(() => {
+    let cancelled = false;
+    setColor(colorCache.get(symbol) ?? DEFAULT_COLOR);
+
+    void fetchInstrumentColor(symbol).then((resolvedColor) => {
+      if (!cancelled) {
+        setColor(resolvedColor);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [symbol]);
+
+  return color;
+}
+
+export function useInstrumentColorStyle(instrument: Pick<InstrumentReference, 'symbol'>): CSSProperties {
+  const color = useInstrumentColor(instrument);
 
   return {
     '--instrument-color': color.background,

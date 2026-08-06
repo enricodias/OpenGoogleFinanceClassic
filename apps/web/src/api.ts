@@ -33,6 +33,11 @@ export interface BackupDocument {
   };
 }
 
+export interface BrandColor {
+  background: string;
+  foreground: string;
+}
+
 export interface CachedResult<T> {
   data: T;
   fetchedAt: string;

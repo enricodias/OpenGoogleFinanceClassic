@@ -7,7 +7,7 @@ import { UserRepository } from '../persistence/user-repository.js';
 import { WatchlistRepository } from '../persistence/watchlist-repository.js';
 import { SecretCipher } from '../security/secret-cipher.js';
 
-const PROVIDER_IDS: ReadonlySet<string> = new Set(['finnhub', 'twelve-data']);
+const PROVIDER_IDS: ReadonlySet<string> = new Set(['finnhub', 'logo-dev', 'twelve-data']);
 const IDENTIFIER_PATTERN = /^[a-z0-9-]{1,64}$/i;
 
 export class BackupService {

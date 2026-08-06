@@ -26,7 +26,7 @@ import {
   formatRelativeTime,
 } from './format';
 import './earnings.css';
-import { instrumentColorStyle } from './instrument-color';
+import { useInstrumentColorStyle } from './instrument-color';
 
 type View =
   | { kind: 'home' }
@@ -430,6 +430,10 @@ function EmptyWatchlist({ onCreate }: { onCreate: () => void }) {
   );
 }
 
+function TickerBadge({ instrument }: { instrument: Pick<InstrumentReference, 'symbol'> }) {
+  return <span className="ticker-badge" style={useInstrumentColorStyle(instrument)}>{instrument.symbol}</span>;
+}
+
 function WatchlistRows({ onOpenInstrument, onRemove, quotes, watchlist }: {
   onOpenInstrument: (instrument: InstrumentReference) => void;
   onRemove: (watchlistId: string, entryId: string) => Promise<void>;
@@ -449,7 +453,7 @@ function WatchlistRows({ onOpenInstrument, onRemove, quotes, watchlist }: {
 
         return (
           <div className="watchlist-row" key={`${tile.instrument.symbol}-${tile.instrument.exchange ?? ''}`}>
-            <span className="ticker-badge" style={instrumentColorStyle(tile.instrument)}>{tile.instrument.symbol}</span>
+            <TickerBadge instrument={tile.instrument} />
             <button className="instrument-name" onClick={() => onOpenInstrument(tile.instrument)} type="button">{tile.instrument.name}</button>
             <span>{formatCurrency(quote?.lastPrice ?? null, quote?.currency ?? 'USD')}</span>
             <span className={`market-change ${direction}`}>{formatCurrency(quote?.change ?? null, quote?.currency ?? 'USD')}</span>
@@ -467,7 +471,7 @@ function QuotePill({ tile }: { tile: HomeData['marketGroups'][number]['quotes'][
   const positive = (quote?.percentChange ?? 0) >= 0;
 
   return (
-    <button className="quote-pill" style={instrumentColorStyle(tile.instrument)} type="button">
+    <button className="quote-pill" style={useInstrumentColorStyle(tile.instrument)} type="button">
       <span className={positive ? 'arrow-up' : 'arrow-down'}>{positive ? '↑' : '↓'}</span>
       <span><strong>{tile.instrument.symbol}</strong><small>{formatCurrency(quote?.lastPrice ?? null, quote?.currency ?? 'USD')}</small></span>
       <span className={positive ? 'positive' : 'negative'}>{formatPercent(quote?.percentChange ?? null)}</span>
@@ -554,7 +558,7 @@ function SearchBox({ onSelect }: { onSelect: (instrument: InstrumentReference) =
               }}
               type="button"
             >
-              <span className="ticker-badge" style={instrumentColorStyle(result)}>{result.symbol}</span>
+              <TickerBadge instrument={result} />
               <span><strong>{result.name}</strong><small>{result.exchange ?? result.type ?? 'Market data'}</small></span>
             </button>
           ))}
@@ -713,7 +717,7 @@ function SettingsPanel({ onClose, onUpdated, settings }: {
   const [pending, setPending] = useState(false);
   const configuredProviders = settings?.configuredProviders ?? [];
 
-  async function saveProvider(event: FormEvent<HTMLFormElement>, providerId: 'finnhub' | 'twelve-data'): Promise<void> {
+  async function saveProvider(event: FormEvent<HTMLFormElement>, providerId: 'finnhub' | 'logo-dev' | 'twelve-data'): Promise<void> {
     event.preventDefault();
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
@@ -728,7 +732,7 @@ function SettingsPanel({ onClose, onUpdated, settings }: {
       });
       formElement.reset();
       onUpdated();
-      setMessage(`${providerId === 'twelve-data' ? 'Twelve Data' : 'Finnhub'} key saved.`);
+      setMessage(`${providerId === 'twelve-data' ? 'Twelve Data' : providerId === 'logo-dev' ? 'Logo.dev' : 'Finnhub'} key saved.`);
     } catch (requestError) {
       setMessage(errorMessage(requestError));
     } finally {
@@ -875,6 +879,15 @@ function SettingsPanel({ onClose, onUpdated, settings }: {
           <p className="provider-status">{configuredProviders.includes('finnhub') ? 'Connected' : 'Not connected'}</p>
           <form className="inline-form" onSubmit={(event) => void saveProvider(event, 'finnhub')}>
             <input aria-label="Finnhub API key" name="apiKey" placeholder="Paste API key" required type="password" />
+            <button className="secondary-button" disabled={pending} type="submit">Save</button>
+          </form>
+        </section>
+        <section className="stack">
+          <h3>Logo.dev</h3>
+          <p className="muted">Optional. Enables per-stock brand colors instead of a default color.</p>
+          <p className="provider-status">{configuredProviders.includes('logo-dev') ? 'Connected' : 'Not connected'}</p>
+          <form className="inline-form" onSubmit={(event) => void saveProvider(event, 'logo-dev')}>
+            <input aria-label="Logo.dev API key" name="apiKey" placeholder="Paste secret API key" required type="password" />
             <button className="secondary-button" disabled={pending} type="submit">Save</button>
           </form>
         </section>

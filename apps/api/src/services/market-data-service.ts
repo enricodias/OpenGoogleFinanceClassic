@@ -1,4 +1,5 @@
 import type {
+  BrandColor,
   ChartPoint,
   CompanySnapshot,
   EarningsRecord,
@@ -12,11 +13,14 @@ import { ProviderError } from '../errors/provider-error.js';
 import { SharedCache, type CachedResult } from '../persistence/shared-cache.js';
 import { UserRepository } from '../persistence/user-repository.js';
 import { FinnhubClient } from '../providers/finnhub-client.js';
+import { LogoDevClient } from '../providers/logo-dev-client.js';
 import { TwelveDataClient } from '../providers/twelve-data-client.js';
 import { SecretCipher } from '../security/secret-cipher.js';
+import { brandColorFromHex, DEFAULT_BRAND_COLOR, resolveDomain } from './brand-color.js';
 
 interface MarketDataServiceOptions {
   finnhubBaseUrl: string;
+  logoDevBaseUrl: string;
   providerRequestTimeoutMs: number;
   twelveDataBaseUrl: string;
 }
@@ -117,6 +121,19 @@ export class MarketDataService {
     );
   }
 
+  public async getBrandColor(userId: string, symbol: string): Promise<CachedResult<BrandColor>> {
+    const client = await this.logoDevClient(userId);
+    const companyProfile = await this.getCompanyProfile(userId, symbol);
+
+    return this.cache.getOrLoad(
+      'logo-dev:brand-color',
+      { symbol },
+      2592000,
+      2592000,
+      async () => this.resolveBrandColor(client, companyProfile.data.website),
+    );
+  }
+
   public async getQuote(userId: string, symbol: string): Promise<CachedResult<MarketQuote>> {
     const settings = await this.users.getSettings(userId);
     const client = await this.twelveDataClient(userId);
@@ -150,6 +167,28 @@ export class MarketDataService {
       this.options.finnhubBaseUrl,
       this.options.providerRequestTimeoutMs,
     );
+  }
+
+  private async logoDevClient(userId: string): Promise<LogoDevClient> {
+    const apiKey = await this.getApiKey(userId, 'logo-dev');
+
+    return new LogoDevClient(
+      apiKey,
+      this.options.logoDevBaseUrl,
+      this.options.providerRequestTimeoutMs,
+    );
+  }
+
+  private async resolveBrandColor(client: LogoDevClient, website: string | null): Promise<BrandColor> {
+    const domain = resolveDomain(website);
+
+    if (domain === null) {
+      return DEFAULT_BRAND_COLOR;
+    }
+
+    const hex = await client.getBrandColor(domain);
+
+    return hex === null ? DEFAULT_BRAND_COLOR : brandColorFromHex(hex);
   }
 
   private async getApiKey(userId: string, providerId: string): Promise<string> {

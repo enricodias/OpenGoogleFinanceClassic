@@ -50,6 +50,7 @@ export async function buildServer(
   const watchlists = new WatchlistRepository(cache.redisClient);
   const marketData = new MarketDataService(users, cipher, cache, {
     finnhubBaseUrl: config.finnhubBaseUrl,
+    logoDevBaseUrl: config.logoDevBaseUrl,
     providerRequestTimeoutMs: config.providerRequestTimeoutMs,
     twelveDataBaseUrl: config.twelveDataBaseUrl,
   });

@@ -7,7 +7,11 @@ export abstract class ProviderClient {
     private readonly requestTimeoutMs: number,
   ) {}
 
-  protected async getJson(path: string, parameters: Record<string, string>): Promise<unknown> {
+  protected async getJson(
+    path: string,
+    parameters: Record<string, string>,
+    headers?: Record<string, string>,
+  ): Promise<unknown> {
     const url = new URL(`${this.baseUrl.replace(/\/$/, '')}/${path.replace(/^\//, '')}`);
 
     for (const [name, value] of Object.entries(parameters)) {
@@ -18,6 +22,7 @@ export abstract class ProviderClient {
 
     try {
       response = await fetch(url, {
+        headers,
         signal: AbortSignal.timeout(this.requestTimeoutMs),
       });
     } catch {

@@ -12,6 +12,12 @@ export interface CompanySnapshot {
   website: string | null;
 }
 
+
+export interface BrandColor {
+  background: string;
+  foreground: string;
+}
+
 export interface EarningsRecord {
   actualEarningsPerShare: number | null;
   actualRevenue: number | null;
