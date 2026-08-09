@@ -71,6 +71,13 @@ export function registerMarketDataRoutes(
     return withProviderError(() => marketData.getEarnings(user.id, symbol));
   });
 
+  server.get('/api/market/recommendation-trends', async (request) => {
+    const user = await auth.requireCurrentUser(request);
+    const symbol = readQueryString(request.query, 'symbol');
+
+    return withProviderError(() => marketData.getRecommendationTrends(user.id, symbol));
+  });
+
   server.get('/api/market/earnings-calendar', async (request) => {
     const user = await auth.requireCurrentUser(request);
     const from = readDate(request.query, 'from', today());

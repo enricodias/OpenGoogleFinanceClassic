@@ -7,6 +7,7 @@ import type {
   InstrumentSearchResult,
   MarketQuote,
   NewsArticle,
+  RecommendationTrend,
 } from '../domain/market.js';
 import { HttpError } from '../errors/http-error.js';
 import { ProviderError } from '../errors/provider-error.js';
@@ -77,6 +78,18 @@ export class MarketDataService {
       21600,
       86400,
       async () => client.getEarnings(symbol),
+    );
+  }
+
+  public async getRecommendationTrends(userId: string, symbol: string): Promise<CachedResult<RecommendationTrend[]>> {
+    const client = await this.finnhubClient(userId);
+
+    return this.cache.getOrLoad(
+      'finnhub:recommendation-trends:v1',
+      { symbol },
+      2592000,
+      2592000,
+      async () => client.getRecommendationTrends(symbol),
     );
   }
 

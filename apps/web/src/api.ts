@@ -58,6 +58,15 @@ export interface CompanySnapshot {
   website: string | null;
 }
 
+export interface RecommendationTrend {
+  buy: number;
+  hold: number;
+  period: string;
+  sell: number;
+  strongBuy: number;
+  strongSell: number;
+}
+
 export interface EarningsCalendarEntry {
   actualEarningsPerShare: number | null;
   actualRevenue?: number | null;

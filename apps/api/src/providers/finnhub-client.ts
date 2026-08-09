@@ -1,4 +1,4 @@
-import type { CompanySnapshot, EarningsRecord, FinnhubEarningsCalendarEntry, NewsArticle } from '../domain/market.js';
+import type { CompanySnapshot, EarningsRecord, FinnhubEarningsCalendarEntry, NewsArticle, RecommendationTrend } from '../domain/market.js';
 import { ProviderError } from '../errors/provider-error.js';
 import { ProviderClient } from './provider-client.js';
 
@@ -85,6 +85,27 @@ export class FinnhubClient extends ProviderClient {
     }).sort((left, right) => right.releaseDate.localeCompare(left.releaseDate));
   }
 
+  public async getRecommendationTrends(symbol: string): Promise<RecommendationTrend[]> {
+    const payload = await this.request('/stock/recommendation', { symbol });
+
+    if (!Array.isArray(payload)) {
+      throw new ProviderError('unavailable', 'Finnhub returned an invalid recommendation trends response.');
+    }
+
+    return payload.map((value) => {
+      const entry = readObject(value);
+
+      return {
+        buy: readCount(entry.buy),
+        hold: readCount(entry.hold),
+        period: readString(entry.period),
+        sell: readCount(entry.sell),
+        strongBuy: readCount(entry.strongBuy),
+        strongSell: readCount(entry.strongSell),
+      };
+    }).sort((left, right) => left.period.localeCompare(right.period));
+  }
+
   public async getGeneralNews(category: string): Promise<NewsArticle[]> {
     const payload = await this.request('/news', { category });
 
@@ -127,6 +148,14 @@ function readNumber(value: unknown): number {
   }
 
   throw new ProviderError('unavailable', 'Finnhub returned incomplete news data.');
+}
+
+function readCount(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+    return value;
+  }
+
+  throw new ProviderError('unavailable', 'Finnhub returned incomplete recommendation trends data.');
 }
 
 function readOptionalNumber(value: unknown): number | null {

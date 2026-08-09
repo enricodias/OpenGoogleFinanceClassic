@@ -26,4 +26,32 @@ describe('FinnhubClient', () => {
       expect.any(Object),
     );
   });
+
+  it('returns recommendation trends from the stock recommendation endpoint', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify([{
+      buy: 12,
+      hold: 5,
+      period: '2026-07-01',
+      sell: 1,
+      strongBuy: 20,
+      strongSell: 0,
+      symbol: 'META',
+    }]))));
+    const client = new FinnhubClient('test-key', 'https://finnhub.example/api/v1', 1000);
+
+    await expect(client.getRecommendationTrends('META')).resolves.toEqual([{
+      buy: 12,
+      hold: 5,
+      period: '2026-07-01',
+      sell: 1,
+      strongBuy: 20,
+      strongSell: 0,
+    }]);
+    expect(fetch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        href: 'https://finnhub.example/api/v1/stock/recommendation?symbol=META&token=test-key',
+      }),
+      expect.any(Object),
+    );
+  });
 });

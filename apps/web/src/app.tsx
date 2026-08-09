@@ -16,6 +16,7 @@ import {
   type MarketGroup,
   type MarketQuote,
   type NewsArticle,
+  type RecommendationTrend,
   type Settings,
   type Watchlist,
   type WatchlistSortColumn,
@@ -41,6 +42,7 @@ interface InstrumentData {
   upcomingEarnings: CachedResult<EarningsCalendarEntry[]> | null;
   news: CachedResult<NewsArticle[]> | null;
   quote: CachedResult<MarketQuote> | null;
+  recommendationTrends: CachedResult<RecommendationTrend[]> | null;
 }
 
 const EMPTY_INSTRUMENT_DATA: InstrumentData = {
@@ -50,6 +52,7 @@ const EMPTY_INSTRUMENT_DATA: InstrumentData = {
   upcomingEarnings: null,
   news: null,
   quote: null,
+  recommendationTrends: null,
 };
 
 export function App() {
@@ -1153,6 +1156,7 @@ function InstrumentView({ dateFormat, instrument, onBack, onChanged, watchlists 
           api<CachedResult<EarningsRecord[]>>(`/api/market/earnings?symbol=${encodeURIComponent(instrument.symbol)}`),
           api<CachedResult<EarningsCalendarEntry[]>>(`/api/market/earnings-calendar?symbol=${encodeURIComponent(instrument.symbol)}&from=${daysAgo(31)}&to=${daysFromToday(90)}`),
           api<CachedResult<NewsArticle[]>>(`/api/market/company-news?symbol=${encodeURIComponent(instrument.symbol)}`),
+          api<CachedResult<RecommendationTrend[]>>(`/api/market/recommendation-trends?symbol=${encodeURIComponent(instrument.symbol)}`),
         ]);
         setData({
           chart: resultValue(results[1]),
@@ -1160,6 +1164,7 @@ function InstrumentView({ dateFormat, instrument, onBack, onChanged, watchlists 
           earnings: resultValue(results[3]),
           news: resultValue(results[5]),
           quote: resultValue(results[0]),
+          recommendationTrends: resultValue(results[6]),
           upcomingEarnings: resultValue(results[4]),
         });
         const rejectedResult = results.find((result) => result.status === 'rejected');
@@ -1230,7 +1235,10 @@ function InstrumentView({ dateFormat, instrument, onBack, onChanged, watchlists 
       </div>
       <div className="details-grid">
         <section className="card"><h2>In the news</h2><NewsList news={data.news?.data ?? []} /></section>
-        <section className="card"><h2>Earnings</h2><UpcomingEarnings dateFormat={dateFormat} earnings={data.upcomingEarnings?.data ?? []} /><EarningsHistory calendar={data.upcomingEarnings?.data ?? []} dateFormat={dateFormat} earnings={data.earnings?.data ?? []} /></section>
+        <div className="details-side">
+          <section className="card"><h2>Earnings</h2><UpcomingEarnings dateFormat={dateFormat} earnings={data.upcomingEarnings?.data ?? []} /><EarningsHistory calendar={data.upcomingEarnings?.data ?? []} dateFormat={dateFormat} earnings={data.earnings?.data ?? []} /></section>
+          <section className="card recommendation-section"><h2>Analyst recommendations</h2><RecommendationTrendChart trends={data.recommendationTrends?.data ?? []} /></section>
+        </div>
       </div>
     </section>
   );
@@ -1353,6 +1361,78 @@ function daysAgo(days: number): string {
   const date = new Date();
   date.setUTCDate(date.getUTCDate() - days);
   return date.toISOString().slice(0, 10);
+}
+
+const RECOMMENDATION_SEGMENTS = [
+  { key: 'strongBuy', label: 'Strong buy' },
+  { key: 'buy', label: 'Buy' },
+  { key: 'hold', label: 'Hold' },
+  { key: 'sell', label: 'Sell' },
+  { key: 'strongSell', label: 'Strong sell' },
+] as const;
+
+function RecommendationTrendChart({ trends }: { trends: RecommendationTrend[] }) {
+  const visibleTrends = trends.slice(-4).reverse();
+
+  if (visibleTrends.length === 0) {
+    return <p className="muted">No analyst recommendation data available.</p>;
+  }
+
+  const current = visibleTrends[0]!;
+  const total = recommendationTotal(current);
+  const historicalMaximum = Math.max(...visibleTrends.flatMap((trend) => RECOMMENDATION_SEGMENTS.map(({ key }) => trend[key])), 1);
+
+  return (
+    <div className="recommendation-chart">
+      <div className="recommendation-current">
+        <RecommendationDonut total={total} trend={current} />
+        <div className="recommendation-breakdown">
+          {RECOMMENDATION_SEGMENTS.map(({ key, label }) => <div key={key}><span><i className={`recommendation-dot recommendation-${key}`} />{label}</span><strong>{current[key]}</strong></div>)}
+        </div>
+      </div>
+      <div className="recommendation-history">
+        <h3>Historical breakdown</h3>
+        <div className="recommendation-history-table" role="table">
+          <div className="recommendation-history-header" role="row"><span role="columnheader" />{visibleTrends.map((trend, index) => <strong key={trend.period} role="columnheader" title={formatRecommendationPeriod(trend.period)}>{index === 0 ? 'Current' : `${index} month${index === 1 ? '' : 's'} ago`}</strong>)}</div>
+          {RECOMMENDATION_SEGMENTS.map(({ key, label }) => {
+            return <div className="recommendation-history-row" key={key} role="row"><span role="rowheader">{label}</span>{visibleTrends.map((trend) => <div className="recommendation-history-cell" key={trend.period} role="cell"><span aria-label={`${formatRecommendationPeriod(trend.period)}: ${label}, ${trend[key]} analyst rating${trend[key] === 1 ? '' : 's'}`} className={`recommendation-history-bar recommendation-${key}${trend[key] === 0 ? ' recommendation-history-zero' : ''}`} style={trend[key] === 0 ? undefined : { width: `${(trend[key] / historicalMaximum) * 100}%` }} title={`${formatRecommendationPeriod(trend.period)} — ${label}: ${trend[key]}`}>{trend[key]}</span></div>)}</div>;
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RecommendationDonut({ total, trend }: { total: number; trend: RecommendationTrend }) {
+  const circumference = 2 * Math.PI * 47;
+  let offset = 0;
+
+  return <div className="recommendation-donut" aria-label={`${total} analyst ratings for ${formatRecommendationPeriod(trend.period)}`} role="img">
+    <svg aria-hidden="true" viewBox="0 0 120 120">
+      <circle className="recommendation-donut-track" cx="60" cy="60" fill="none" r="47" />
+      {RECOMMENDATION_SEGMENTS.map(({ key }) => {
+        const length = total === 0 ? 0 : (trend[key] / total) * circumference;
+        const segment = <circle className={`recommendation-donut-segment recommendation-${key}`} cx="60" cy="60" fill="none" key={key} r="47" strokeDasharray={`${length} ${circumference - length}`} strokeDashoffset={-offset} />;
+        offset += length;
+        return segment;
+      })}
+    </svg>
+    <span><strong>{total}</strong><small>Ratings</small></span>
+  </div>;
+}
+
+function recommendationTotal(trend: RecommendationTrend): number {
+  return trend.buy + trend.hold + trend.sell + trend.strongBuy + trend.strongSell;
+}
+
+function formatRecommendationPeriod(period: string): string {
+  const date = new Date(`${period}T00:00:00Z`);
+
+  if (Number.isNaN(date.getTime())) {
+    return period;
+  }
+
+  return date.toLocaleDateString(undefined, { month: 'short', year: '2-digit', timeZone: 'UTC' });
 }
 
 function Fact({ label, value }: { label: string; value: ReactNode }) {
