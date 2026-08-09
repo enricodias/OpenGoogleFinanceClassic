@@ -36,7 +36,7 @@ export abstract class ProviderClient {
     if (response.status === 403) {
       throw new ProviderError(
         'unavailable',
-        `${this.providerName} denied a request. Check that the API key and plan include the endpoints used in this page.`,
+        `${this.providerName} denied this request. Check that the API key and plan include this endpoint.`,
       );
     }
 

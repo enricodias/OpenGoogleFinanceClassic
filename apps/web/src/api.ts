@@ -144,7 +144,13 @@ export interface Settings {
   quoteRefreshIntervalSeconds: number;
   selectedWatchlistId: string | null;
   theme: 'dark' | 'light' | 'system';
+  watchlistSortColumn: WatchlistSortColumn | null;
+  watchlistSortDirection: WatchlistSortDirection;
 }
+
+export type WatchlistSortColumn = 'change' | 'name' | 'percentChange' | 'price';
+
+export type WatchlistSortDirection = 'asc' | 'desc';
 
 export interface Watchlist {
   createdAt: string;

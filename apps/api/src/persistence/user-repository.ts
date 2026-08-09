@@ -7,6 +7,8 @@ import type {
   ThemePreference,
   User,
   UserSettings,
+  WatchlistSortColumn,
+  WatchlistSortDirection,
 } from '../domain/user.js';
 import { getJson, type RedisClient, setJson } from './redis-client.js';
 
@@ -90,6 +92,8 @@ export class UserRepository {
         ...settings,
         dateFormat: settings.dateFormat ?? 'dd/mm/yyyy',
         quoteRefreshIntervalSeconds: settings.quoteRefreshIntervalSeconds ?? 120,
+        watchlistSortColumn: settings.watchlistSortColumn ?? null,
+        watchlistSortDirection: settings.watchlistSortDirection ?? 'desc',
       };
     }
 
@@ -144,6 +148,16 @@ export class UserRepository {
     await setJson(this.client, this.settingsKey(userId), '$.dateFormat', dateFormat);
   }
 
+  public async setWatchlistSort(
+    userId: string,
+    watchlistSortColumn: WatchlistSortColumn | null,
+    watchlistSortDirection: WatchlistSortDirection,
+  ): Promise<void> {
+    await this.getSettings(userId);
+    await setJson(this.client, this.settingsKey(userId), '$.watchlistSortColumn', watchlistSortColumn);
+    await setJson(this.client, this.settingsKey(userId), '$.watchlistSortDirection', watchlistSortDirection);
+  }
+
   public async replaceSettings(
     userId: string,
     theme: ThemePreference,
@@ -151,6 +165,8 @@ export class UserRepository {
     providerCredentials: Record<string, EncryptedSecret>,
     quoteRefreshIntervalSeconds = 120,
     dateFormat: DateFormat = 'dd/mm/yyyy',
+    watchlistSortColumn: WatchlistSortColumn | null = null,
+    watchlistSortDirection: WatchlistSortDirection = 'desc',
   ): Promise<void> {
     await setJson(this.client, this.settingsKey(userId), '$', {
       dateFormat,
@@ -159,6 +175,8 @@ export class UserRepository {
       selectedWatchlistId,
       theme,
       userId,
+      watchlistSortColumn,
+      watchlistSortDirection,
     } satisfies UserSettings);
   }
 
@@ -191,6 +209,8 @@ export class UserRepository {
       selectedWatchlistId: null,
       theme: 'system',
       userId,
+      watchlistSortColumn: null,
+      watchlistSortDirection: 'desc',
     };
   }
 

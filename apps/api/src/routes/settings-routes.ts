@@ -1,9 +1,12 @@
 import type { FastifyInstance } from 'fastify';
 
+import type { WatchlistSortColumn, WatchlistSortDirection } from '../domain/user.js';
 import { HttpError } from '../errors/http-error.js';
 import { UserRepository } from '../persistence/user-repository.js';
 import { SecretCipher } from '../security/secret-cipher.js';
 import { AuthService } from '../services/auth-service.js';
+
+const WATCHLIST_SORT_COLUMNS: ReadonlySet<string> = new Set(['change', 'name', 'percentChange', 'price']);
 
 interface ProviderCredentialBody {
   apiKey?: unknown;
@@ -15,6 +18,11 @@ interface ThemeBody {
 
 interface QuoteRefreshIntervalBody {
   seconds?: unknown;
+}
+
+interface WatchlistSortBody {
+  column?: unknown;
+  direction?: unknown;
 }
 
 const QUOTE_REFRESH_INTERVALS = new Set([60, 120, 300, 600]);
@@ -41,6 +49,8 @@ export function registerSettingsRoutes(
       quoteRefreshIntervalSeconds: settings.quoteRefreshIntervalSeconds,
       selectedWatchlistId: settings.selectedWatchlistId,
       theme: settings.theme,
+      watchlistSortColumn: settings.watchlistSortColumn,
+      watchlistSortDirection: settings.watchlistSortDirection,
     };
   });
 
@@ -78,6 +88,14 @@ export function registerSettingsRoutes(
   server.put('/api/settings/quote-refresh-interval', async (request, reply) => {
     const user = await auth.requireCurrentUser(request);
     await users.setQuoteRefreshIntervalSeconds(user.id, readQuoteRefreshInterval(request.body));
+
+    return reply.code(204).send();
+  });
+
+  server.put('/api/settings/watchlist-sort', async (request, reply) => {
+    const user = await auth.requireCurrentUser(request);
+    const { column, direction } = readWatchlistSort(request.body);
+    await users.setWatchlistSort(user.id, column, direction);
 
     return reply.code(204).send();
   });
@@ -134,6 +152,24 @@ function readDateFormat(body: unknown): 'dd/mm/yyyy' | 'mm/dd/yyyy' {
   }
 
   throw new HttpError(400, 'Date format is invalid.');
+}
+
+function readWatchlistSort(body: unknown): { column: WatchlistSortColumn | null; direction: WatchlistSortDirection } {
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+    throw new HttpError(400, 'Watchlist sort is required.');
+  }
+
+  const { column, direction } = body as WatchlistSortBody;
+
+  if (column !== null && (typeof column !== 'string' || !WATCHLIST_SORT_COLUMNS.has(column))) {
+    throw new HttpError(400, 'Watchlist sort column is invalid.');
+  }
+
+  if (direction !== 'asc' && direction !== 'desc') {
+    throw new HttpError(400, 'Watchlist sort direction is invalid.');
+  }
+
+  return { column: column as WatchlistSortColumn | null, direction };
 }
 
 function readQuoteRefreshInterval(body: unknown): number {

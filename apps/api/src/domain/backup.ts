@@ -1,4 +1,4 @@
-import type { DateFormat, ThemePreference } from './user.js';
+import type { DateFormat, ThemePreference, WatchlistSortColumn, WatchlistSortDirection } from './user.js';
 import type { MarketGroup, Watchlist } from './watchlist.js';
 
 export interface BackupDocument {
@@ -12,5 +12,7 @@ export interface BackupDocument {
     selectedWatchlistId: string | null;
     theme: ThemePreference;
     watchlists: Watchlist[];
+    watchlistSortColumn: WatchlistSortColumn | null;
+    watchlistSortDirection: WatchlistSortDirection;
   };
 }

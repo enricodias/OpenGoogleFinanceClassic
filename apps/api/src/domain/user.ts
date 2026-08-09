@@ -13,6 +13,8 @@ export interface UserSettings {
   selectedWatchlistId: string | null;
   theme: ThemePreference;
   userId: string;
+  watchlistSortColumn: WatchlistSortColumn | null;
+  watchlistSortDirection: WatchlistSortDirection;
 }
 
 export interface EncryptedSecret {
@@ -30,3 +32,7 @@ export interface Session {
 export type ThemePreference = 'dark' | 'light' | 'system';
 
 export type DateFormat = 'dd/mm/yyyy' | 'mm/dd/yyyy';
+
+export type WatchlistSortColumn = 'change' | 'name' | 'percentChange' | 'price';
+
+export type WatchlistSortDirection = 'asc' | 'desc';

@@ -1,5 +1,11 @@
 import type { BackupDocument } from '../domain/backup.js';
-import type { DateFormat, EncryptedSecret, ThemePreference } from '../domain/user.js';
+import type {
+  DateFormat,
+  EncryptedSecret,
+  ThemePreference,
+  WatchlistSortColumn,
+  WatchlistSortDirection,
+} from '../domain/user.js';
 import type { InstrumentReference, MarketGroup, Watchlist, WatchlistEntry } from '../domain/watchlist.js';
 import { HttpError } from '../errors/http-error.js';
 import { MarketGroupRepository } from '../persistence/market-group-repository.js';
@@ -37,6 +43,8 @@ export class BackupService {
         selectedWatchlistId: settings.selectedWatchlistId,
         theme: settings.theme,
         watchlists,
+        watchlistSortColumn: settings.watchlistSortColumn,
+        watchlistSortDirection: settings.watchlistSortDirection,
       },
     };
   }
@@ -62,6 +70,8 @@ export class BackupService {
       providerCredentials,
       120,
       backup.userData.dateFormat,
+      backup.userData.watchlistSortColumn,
+      backup.userData.watchlistSortDirection,
     );
   }
 
@@ -117,6 +127,8 @@ function parseBackup(value: unknown): BackupDocument {
       selectedWatchlistId: readNullableIdentifier(userData.selectedWatchlistId, 'Selected watchlist ID'),
       theme: readTheme(userData.theme),
       watchlists: readWatchlists(userData.watchlists),
+      watchlistSortColumn: readWatchlistSortColumn(userData.watchlistSortColumn),
+      watchlistSortDirection: readWatchlistSortDirection(userData.watchlistSortDirection),
     },
   };
 }
@@ -194,6 +206,30 @@ function readDateFormat(value: unknown): DateFormat {
   }
 
   throw new HttpError(400, 'Backup date format is invalid.');
+}
+
+function readWatchlistSortColumn(value: unknown): WatchlistSortColumn | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (value === 'change' || value === 'name' || value === 'percentChange' || value === 'price') {
+    return value;
+  }
+
+  throw new HttpError(400, 'Backup watchlist sort column is invalid.');
+}
+
+function readWatchlistSortDirection(value: unknown): WatchlistSortDirection {
+  if (value === undefined) {
+    return 'desc';
+  }
+
+  if (value === 'asc' || value === 'desc') {
+    return value;
+  }
+
+  throw new HttpError(400, 'Backup watchlist sort direction is invalid.');
 }
 
 function readWatchlists(value: unknown): Watchlist[] {

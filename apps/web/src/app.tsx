@@ -18,6 +18,8 @@ import {
   type NewsArticle,
   type Settings,
   type Watchlist,
+  type WatchlistSortColumn,
+  type WatchlistSortDirection,
 } from './api';
 import {
   formatCompactNumber,
@@ -207,6 +209,22 @@ function FinanceApplication({ session, onSessionChanged }: {
     }
   }
 
+  async function updateWatchlistSort(column: WatchlistSortColumn): Promise<void> {
+    const direction: WatchlistSortDirection = column === settings?.watchlistSortColumn && settings.watchlistSortDirection === 'desc'
+      ? 'asc'
+      : 'desc';
+
+    try {
+      await api<void>('/api/settings/watchlist-sort', {
+        body: JSON.stringify({ column, direction }),
+        method: 'PUT',
+      });
+      await loadDashboard();
+    } catch (requestError) {
+      setError(errorMessage(requestError));
+    }
+  }
+
   async function submitRenameWatchlist(watchlistId: string, name: string): Promise<void> {
     await api<Watchlist>(`/api/watchlists/${watchlistId}`, {
       body: JSON.stringify({ name }),
@@ -282,6 +300,9 @@ function FinanceApplication({ session, onSessionChanged }: {
           onRenameWatchlist={(watchlist) => setRenameWatchlistTarget(watchlist)}
           onRemoveWatchlistEntry={removeWatchlistEntry}
           onSelectWatchlist={selectWatchlist}
+          onSortWatchlist={updateWatchlistSort}
+          sortColumn={settings?.watchlistSortColumn ?? null}
+          sortDirection={settings?.watchlistSortDirection ?? 'desc'}
           watchlists={watchlists}
         />
       ) : (
@@ -346,7 +367,7 @@ function FinanceApplication({ session, onSessionChanged }: {
   );
 }
 
-function Dashboard({ dateFormat, home, onCreateWatchlist, onDeleteWatchlist, onEditMarketGroups, onOpenInstrument, onRenameWatchlist, onRemoveWatchlistEntry, onSelectWatchlist, watchlists }: {
+function Dashboard({ dateFormat, home, onCreateWatchlist, onDeleteWatchlist, onEditMarketGroups, onOpenInstrument, onRenameWatchlist, onRemoveWatchlistEntry, onSelectWatchlist, onSortWatchlist, sortColumn, sortDirection, watchlists }: {
   dateFormat: Settings['dateFormat'];
   home: HomeData | null;
   onCreateWatchlist: () => void;
@@ -356,6 +377,9 @@ function Dashboard({ dateFormat, home, onCreateWatchlist, onDeleteWatchlist, onE
   onRenameWatchlist: (watchlist: Watchlist) => void;
   onRemoveWatchlistEntry: (watchlistId: string, entryId: string) => Promise<void>;
   onSelectWatchlist: (watchlistId: string) => Promise<void>;
+  onSortWatchlist: (column: WatchlistSortColumn) => Promise<void>;
+  sortColumn: WatchlistSortColumn | null;
+  sortDirection: WatchlistSortDirection;
   watchlists: Watchlist[];
 }) {
   if (home === null) {
@@ -400,7 +424,15 @@ function Dashboard({ dateFormat, home, onCreateWatchlist, onDeleteWatchlist, onE
           {selectedWatchlist === null ? (
             <EmptyWatchlist onCreate={onCreateWatchlist} />
           ) : (
-            <WatchlistRows onOpenInstrument={onOpenInstrument} onRemove={onRemoveWatchlistEntry} quotes={home.selectedWatchlist.quotes} watchlist={selectedWatchlist} />
+            <WatchlistRows
+              onOpenInstrument={onOpenInstrument}
+              onRemove={onRemoveWatchlistEntry}
+              onSort={onSortWatchlist}
+              quotes={home.selectedWatchlist.quotes}
+              sortColumn={sortColumn}
+              sortDirection={sortDirection}
+              watchlist={selectedWatchlist}
+            />
           )}
 
           <section className="content-section">
@@ -434,36 +466,126 @@ function TickerBadge({ instrument }: { instrument: Pick<InstrumentReference, 'sy
   return <span className="ticker-badge" style={useInstrumentColorStyle(instrument)}>{instrument.symbol}</span>;
 }
 
-function WatchlistRows({ onOpenInstrument, onRemove, quotes, watchlist }: {
+function TickerBadgeButton({ instrument, onOpenInstrument }: {
+  instrument: InstrumentReference;
+  onOpenInstrument: (instrument: InstrumentReference) => void;
+}) {
+  return (
+    <button className="ticker-badge-button" onClick={() => onOpenInstrument(instrument)} type="button">
+      <TickerBadge instrument={instrument} />
+    </button>
+  );
+}
+
+function WatchlistRows({ onOpenInstrument, onRemove, onSort, quotes, sortColumn, sortDirection, watchlist }: {
   onOpenInstrument: (instrument: InstrumentReference) => void;
   onRemove: (watchlistId: string, entryId: string) => Promise<void>;
+  onSort: (column: WatchlistSortColumn) => Promise<void>;
   quotes: HomeData['selectedWatchlist']['quotes'];
+  sortColumn: WatchlistSortColumn | null;
+  sortDirection: WatchlistSortDirection;
   watchlist: Watchlist;
 }) {
   if (quotes.length === 0) {
     return <div className="empty-state compact"><p>This watchlist is empty. Search for an instrument to add it.</p></div>;
   }
 
+  const sortedQuotes = sortWatchlistQuotes(quotes, sortColumn, sortDirection);
+
   return (
     <div className="watchlist-rows">
-      {quotes.map((tile) => {
+      <WatchlistHeaderRow onSort={onSort} sortColumn={sortColumn} sortDirection={sortDirection} />
+      {sortedQuotes.map((tile) => {
         const quote = tile.quote?.data;
         const direction = quote?.percentChange === null || quote?.percentChange === undefined ? 'neutral' : quote.percentChange >= 0 ? 'positive' : 'negative';
         const entry = watchlist.entries.find(({ instrument }) => instrument.symbol === tile.instrument.symbol && instrument.exchange === tile.instrument.exchange);
 
         return (
           <div className="watchlist-row" key={`${tile.instrument.symbol}-${tile.instrument.exchange ?? ''}`}>
-            <TickerBadge instrument={tile.instrument} />
+            <TickerBadgeButton instrument={tile.instrument} onOpenInstrument={onOpenInstrument} />
             <button className="instrument-name" onClick={() => onOpenInstrument(tile.instrument)} type="button">{tile.instrument.name}</button>
             <span>{formatCurrency(quote?.lastPrice ?? null, quote?.currency ?? 'USD')}</span>
             <span className={`market-change ${direction}`}>{formatCurrency(quote?.change ?? null, quote?.currency ?? 'USD')}</span>
             <span className={`change-chip ${direction}`}>{formatPercent(quote?.percentChange ?? null)}</span>
-            {entry === undefined ? null : <button aria-label={`Remove ${tile.instrument.symbol} from ${watchlist.name}`} className="remove-entry-button" onClick={() => void onRemove(watchlist.id, entry.id)} type="button">Remove</button>}
+            {entry === undefined ? null : <button aria-label={`Remove ${tile.instrument.symbol} from ${watchlist.name}`} className="remove-entry-button" onClick={() => void onRemove(watchlist.id, entry.id)} type="button">×</button>}
           </div>
         );
       })}
     </div>
   );
+}
+
+const WATCHLIST_SORT_HEADERS: { column: WatchlistSortColumn; label: string }[] = [
+  { column: 'name', label: 'Name' },
+  { column: 'price', label: 'Price' },
+  { column: 'change', label: 'Change' },
+  { column: 'percentChange', label: '% Change' },
+];
+
+function WatchlistHeaderRow({ onSort, sortColumn, sortDirection }: {
+  onSort: (column: WatchlistSortColumn) => Promise<void>;
+  sortColumn: WatchlistSortColumn | null;
+  sortDirection: WatchlistSortDirection;
+}) {
+  return (
+    <div className="watchlist-row watchlist-header-row">
+      <span aria-hidden="true" />
+      {WATCHLIST_SORT_HEADERS.map(({ column, label }) => (
+        <button
+          className={`watchlist-sort-button${sortColumn === column ? ' active' : ''}`}
+          key={column}
+          onClick={() => void onSort(column)}
+          type="button"
+        >
+          {label}
+          {sortColumn === column ? <span aria-hidden="true" className="sort-arrow">{sortDirection === 'asc' ? '▲' : '▼'}</span> : null}
+        </button>
+      ))}
+      <span aria-hidden="true" />
+    </div>
+  );
+}
+
+function sortWatchlistQuotes(
+  quotes: HomeData['selectedWatchlist']['quotes'],
+  sortColumn: WatchlistSortColumn | null,
+  sortDirection: WatchlistSortDirection,
+): HomeData['selectedWatchlist']['quotes'] {
+  if (sortColumn === null) {
+    return quotes;
+  }
+
+  const sortedQuotes = [...quotes];
+
+  sortedQuotes.sort((a, b) => {
+    if (sortColumn === 'name') {
+      return sortDirection === 'asc'
+        ? a.instrument.name.localeCompare(b.instrument.name)
+        : b.instrument.name.localeCompare(a.instrument.name);
+    }
+
+    const field = sortColumn === 'price' ? 'lastPrice' : sortColumn;
+
+    return compareNullableNumbers(a.quote?.data[field] ?? null, b.quote?.data[field] ?? null, sortDirection);
+  });
+
+  return sortedQuotes;
+}
+
+function compareNullableNumbers(a: number | null, b: number | null, direction: WatchlistSortDirection): number {
+  if (a === null && b === null) {
+    return 0;
+  }
+
+  if (a === null) {
+    return 1;
+  }
+
+  if (b === null) {
+    return -1;
+  }
+
+  return direction === 'asc' ? a - b : b - a;
 }
 
 function QuotePill({ tile }: { tile: HomeData['marketGroups'][number]['quotes'][number] }) {
