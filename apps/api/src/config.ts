@@ -6,6 +6,7 @@ export interface AppConfig {
   encryptionKey: Buffer;
   finnhubBaseUrl: string;
   logoDevBaseUrl: string;
+  massiveBaseUrl: string;
   nodeEnvironment: string;
   port: number;
   providerRequestTimeoutMs: number;
@@ -49,6 +50,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
     encryptionKey,
     finnhubBaseUrl: environment.FINNHUB_BASE_URL ?? 'https://finnhub.io/api/v1',
     logoDevBaseUrl: environment.LOGO_DEV_BASE_URL ?? 'https://api.logo.dev',
+    massiveBaseUrl: environment.MASSIVE_BASE_URL ?? 'https://api.massive.com',
     nodeEnvironment: environment.NODE_ENV ?? 'development',
     port,
     providerRequestTimeoutMs,

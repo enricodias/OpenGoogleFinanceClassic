@@ -51,6 +51,7 @@ export async function buildServer(
   const marketData = new MarketDataService(users, cipher, cache, {
     finnhubBaseUrl: config.finnhubBaseUrl,
     logoDevBaseUrl: config.logoDevBaseUrl,
+    massiveBaseUrl: config.massiveBaseUrl,
     providerRequestTimeoutMs: config.providerRequestTimeoutMs,
     twelveDataBaseUrl: config.twelveDataBaseUrl,
   });

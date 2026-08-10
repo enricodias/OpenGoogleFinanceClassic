@@ -2,6 +2,8 @@ import type {
   BrandColor,
   ChartPoint,
   CompanySnapshot,
+  DividendRecord,
+  DividendSummary,
   EarningsRecord,
   FinnhubEarningsCalendarEntry,
   InstrumentSearchResult,
@@ -15,6 +17,7 @@ import { SharedCache, type CachedResult } from '../persistence/shared-cache.js';
 import { UserRepository } from '../persistence/user-repository.js';
 import { FinnhubClient } from '../providers/finnhub-client.js';
 import { LogoDevClient } from '../providers/logo-dev-client.js';
+import { MassiveClient } from '../providers/massive-client.js';
 import { TwelveDataClient } from '../providers/twelve-data-client.js';
 import { SecretCipher } from '../security/secret-cipher.js';
 import { brandColorFromHex, DEFAULT_BRAND_COLOR, resolveDomain } from './brand-color.js';
@@ -22,6 +25,7 @@ import { brandColorFromHex, DEFAULT_BRAND_COLOR, resolveDomain } from './brand-c
 interface MarketDataServiceOptions {
   finnhubBaseUrl: string;
   logoDevBaseUrl: string;
+  massiveBaseUrl: string;
   providerRequestTimeoutMs: number;
   twelveDataBaseUrl: string;
 }
@@ -41,14 +45,25 @@ export class MarketDataService {
     outputsize: number,
   ): Promise<CachedResult<ChartPoint[]>> {
     const freshnessSeconds = interval.endsWith('min') ? 60 : 43200;
-    const client = await this.twelveDataClient(userId);
 
     return this.cache.getOrLoad(
-      'twelve-data:chart',
+      'market:chart',
       { interval, outputsize, symbol },
       freshnessSeconds,
       3600,
-      async () => client.getChart(symbol, interval, outputsize),
+      async () => this.loadChart(userId, symbol, interval, outputsize),
+    );
+  }
+
+  public async getDividends(userId: string, symbol: string): Promise<CachedResult<DividendSummary>> {
+    const client = await this.massiveClient(userId);
+
+    return this.cache.getOrLoad(
+      'massive:dividends',
+      { symbol },
+      86400,
+      604800,
+      async () => this.buildDividendSummary(userId, symbol, await client.getDividends(symbol)),
     );
   }
 
@@ -172,6 +187,35 @@ export class MarketDataService {
     );
   }
 
+  private buildDividendSummary(userId: string, symbol: string, records: DividendRecord[]): Promise<DividendSummary> {
+    const annualDividendAmount = this.estimateAnnualDividendAmount(records);
+    const nextDividend = this.projectNextDividend(records);
+
+    return this.getQuote(userId, symbol).then((quote) => ({
+      annualDividendAmount,
+      nextDividend,
+      records,
+      yieldPercent: this.computeYieldPercent(annualDividendAmount, quote.data.lastPrice),
+    }));
+  }
+
+  private computeYieldPercent(annualDividendAmount: number, lastPrice: number): number | null {
+    if (lastPrice <= 0) {
+      return null;
+    }
+
+    return (annualDividendAmount / lastPrice) * 100;
+  }
+
+  private estimateAnnualDividendAmount(records: DividendRecord[]): number {
+    const oneYearAgo = new Date();
+    oneYearAgo.setUTCDate(oneYearAgo.getUTCDate() - 365);
+
+    return records
+      .filter((record) => new Date(record.exDividendDate) >= oneYearAgo)
+      .reduce((total, record) => total + record.cashAmount, 0);
+  }
+
   private async finnhubClient(userId: string): Promise<FinnhubClient> {
     const apiKey = await this.getApiKey(userId, 'finnhub');
 
@@ -182,6 +226,18 @@ export class MarketDataService {
     );
   }
 
+  private async loadChart(userId: string, symbol: string, interval: string, outputsize: number): Promise<ChartPoint[]> {
+    try {
+      const massive = await this.massiveClient(userId);
+
+      return await massive.getChart(symbol, interval, outputsize);
+    } catch {
+      const twelveData = await this.twelveDataClient(userId);
+
+      return twelveData.getChart(symbol, interval, outputsize);
+    }
+  }
+
   private async logoDevClient(userId: string): Promise<LogoDevClient> {
     const apiKey = await this.getApiKey(userId, 'logo-dev');
 
@@ -190,6 +246,43 @@ export class MarketDataService {
       this.options.logoDevBaseUrl,
       this.options.providerRequestTimeoutMs,
     );
+  }
+
+  private async massiveClient(userId: string): Promise<MassiveClient> {
+    const apiKey = await this.getApiKey(userId, 'massive');
+
+    return new MassiveClient(
+      apiKey,
+      this.options.massiveBaseUrl,
+      this.options.providerRequestTimeoutMs,
+    );
+  }
+
+  private projectNextDividend(records: DividendRecord[]): DividendRecord | null {
+    const [mostRecent] = records;
+
+    if (mostRecent === undefined || mostRecent.frequency === null || mostRecent.frequency <= 0) {
+      return null;
+    }
+
+    const monthsBetweenPayments = Math.round(12 / mostRecent.frequency);
+    const projectedExDividendDate = new Date(mostRecent.exDividendDate);
+    projectedExDividendDate.setUTCMonth(projectedExDividendDate.getUTCMonth() + monthsBetweenPayments);
+
+    const daysSinceLastPayment = (Date.now() - new Date(mostRecent.exDividendDate).getTime()) / (24 * 60 * 60 * 1000);
+    const staleThresholdDays = monthsBetweenPayments * 30 * 2;
+
+    if (daysSinceLastPayment > staleThresholdDays) {
+      return null;
+    }
+
+    return {
+      ...mostRecent,
+      declarationDate: null,
+      exDividendDate: projectedExDividendDate.toISOString().slice(0, 10),
+      payDate: null,
+      recordDate: null,
+    };
   }
 
   private async resolveBrandColor(client: LogoDevClient, website: string | null): Promise<BrandColor> {

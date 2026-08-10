@@ -64,6 +64,13 @@ export function registerMarketDataRoutes(
     return withProviderError(() => marketData.getChart(user.id, symbol, interval, outputsize));
   });
 
+  server.get('/api/market/dividends', async (request) => {
+    const user = await auth.requireCurrentUser(request);
+    const symbol = readQueryString(request.query, 'symbol');
+
+    return withProviderError(() => marketData.getDividends(user.id, symbol));
+  });
+
   server.get('/api/market/earnings', async (request) => {
     const user = await auth.requireCurrentUser(request);
     const symbol = readQueryString(request.query, 'symbol');

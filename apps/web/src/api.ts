@@ -58,6 +58,27 @@ export interface CompanySnapshot {
   website: string | null;
 }
 
+export interface DividendRecord {
+  cashAmount: number;
+  currency: string | null;
+  declarationDate: string | null;
+  distributionType: string | null;
+  exDividendDate: string;
+  frequency: number | null;
+  historicalAdjustmentFactor: number | null;
+  payDate: string | null;
+  recordDate: string | null;
+  splitAdjustedCashAmount: number | null;
+  symbol: string;
+}
+
+export interface DividendSummary {
+  annualDividendAmount: number;
+  nextDividend: DividendRecord | null;
+  records: DividendRecord[];
+  yieldPercent: number | null;
+}
+
 export interface RecommendationTrend {
   buy: number;
   hold: number;

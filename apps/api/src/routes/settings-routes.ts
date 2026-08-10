@@ -30,6 +30,7 @@ const QUOTE_REFRESH_INTERVALS = new Set([60, 120, 300, 600]);
 const SUPPORTED_PROVIDER_IDS: ReadonlySet<string> = new Set([
   'finnhub',
   'logo-dev',
+  'massive',
   'twelve-data',
 ]);
 

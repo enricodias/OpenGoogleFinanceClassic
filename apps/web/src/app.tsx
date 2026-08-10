@@ -8,6 +8,7 @@ import {
   type CachedResult,
   type ChartPoint,
   type CompanySnapshot,
+  type DividendSummary,
   type EarningsCalendarEntry,
   type EarningsRecord,
   type HomeData,
@@ -28,7 +29,6 @@ import {
   formatPercent,
   formatRelativeTime,
 } from './format';
-import './earnings.css';
 import { useInstrumentColorStyle } from './instrument-color';
 
 type View =
@@ -37,6 +37,7 @@ type View =
 
 interface InstrumentData {
   chart: CachedResult<ChartPoint[]> | null;
+  dividends: CachedResult<DividendSummary> | null;
   earnings: CachedResult<EarningsRecord[]> | null;
   companyProfile: CachedResult<CompanySnapshot> | null;
   upcomingEarnings: CachedResult<EarningsCalendarEntry[]> | null;
@@ -47,6 +48,7 @@ interface InstrumentData {
 
 const EMPTY_INSTRUMENT_DATA: InstrumentData = {
   chart: null,
+  dividends: null,
   earnings: null,
   companyProfile: null,
   upcomingEarnings: null,
@@ -591,6 +593,22 @@ function compareNullableNumbers(a: number | null, b: number | null, direction: W
   return direction === 'asc' ? a - b : b - a;
 }
 
+function providerLabel(providerId: 'finnhub' | 'logo-dev' | 'massive' | 'twelve-data'): string {
+  if (providerId === 'twelve-data') {
+    return 'Twelve Data';
+  }
+
+  if (providerId === 'logo-dev') {
+    return 'Logo.dev';
+  }
+
+  if (providerId === 'massive') {
+    return 'Massive';
+  }
+
+  return 'Finnhub';
+}
+
 function QuotePill({ tile }: { tile: HomeData['marketGroups'][number]['quotes'][number] }) {
   const quote = tile.quote?.data;
   const positive = (quote?.percentChange ?? 0) >= 0;
@@ -842,7 +860,7 @@ function SettingsPanel({ onClose, onUpdated, settings }: {
   const [pending, setPending] = useState(false);
   const configuredProviders = settings?.configuredProviders ?? [];
 
-  async function saveProvider(event: FormEvent<HTMLFormElement>, providerId: 'finnhub' | 'logo-dev' | 'twelve-data'): Promise<void> {
+  async function saveProvider(event: FormEvent<HTMLFormElement>, providerId: 'finnhub' | 'logo-dev' | 'massive' | 'twelve-data'): Promise<void> {
     event.preventDefault();
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
@@ -857,7 +875,7 @@ function SettingsPanel({ onClose, onUpdated, settings }: {
       });
       formElement.reset();
       onUpdated();
-      setMessage(`${providerId === 'twelve-data' ? 'Twelve Data' : providerId === 'logo-dev' ? 'Logo.dev' : 'Finnhub'} key saved.`);
+      setMessage(`${providerLabel(providerId)} key saved.`);
     } catch (requestError) {
       setMessage(errorMessage(requestError));
     } finally {
@@ -1017,6 +1035,15 @@ function SettingsPanel({ onClose, onUpdated, settings }: {
           </form>
         </section>
         <section className="stack">
+          <h3>Massive</h3>
+          <p className="muted">Optional. Enables dividends and reduces chart load on Twelve Data.</p>
+          <p className="provider-status">{configuredProviders.includes('massive') ? 'Connected' : 'Not connected'}</p>
+          <form className="inline-form" onSubmit={(event) => void saveProvider(event, 'massive')}>
+            <input aria-label="Massive API key" name="apiKey" placeholder="Paste API key" required type="password" />
+            <button className="secondary-button" disabled={pending} type="submit">Save</button>
+          </form>
+        </section>
+        <section className="stack">
           <h3>Backup and restore</h3>
           <p className="muted">Exports include provider API keys in plain text so you can move your complete account. Keep backup files private.</p>
           <button className="secondary-button" onClick={() => void downloadBackup()} type="button">Download backup</button>
@@ -1157,17 +1184,19 @@ function InstrumentView({ dateFormat, instrument, onBack, onChanged, watchlists 
           api<CachedResult<EarningsCalendarEntry[]>>(`/api/market/earnings-calendar?symbol=${encodeURIComponent(instrument.symbol)}&from=${daysAgo(31)}&to=${daysFromToday(90)}`),
           api<CachedResult<NewsArticle[]>>(`/api/market/company-news?symbol=${encodeURIComponent(instrument.symbol)}`),
           api<CachedResult<RecommendationTrend[]>>(`/api/market/recommendation-trends?symbol=${encodeURIComponent(instrument.symbol)}`),
+          api<CachedResult<DividendSummary>>(`/api/market/dividends?symbol=${encodeURIComponent(instrument.symbol)}`),
         ]);
         setData({
           chart: resultValue(results[1]),
           companyProfile: resultValue(results[2]),
+          dividends: resultValue(results[7]),
           earnings: resultValue(results[3]),
           news: resultValue(results[5]),
           quote: resultValue(results[0]),
           recommendationTrends: resultValue(results[6]),
           upcomingEarnings: resultValue(results[4]),
         });
-        const rejectedResult = results.find((result) => result.status === 'rejected');
+        const rejectedResult = results.slice(0, 7).find((result) => result.status === 'rejected');
         setError(rejectedResult === undefined ? null : errorMessage(rejectedResult.reason));
       } catch (requestError) {
         setError(errorMessage(requestError));
@@ -1229,6 +1258,7 @@ function InstrumentView({ dateFormat, instrument, onBack, onChanged, watchlists 
           <Fact label="52-week range" value={`${formatCurrency(quote?.week52Low ?? null, quote?.currency ?? 'USD')} – ${formatCurrency(quote?.week52High ?? null, quote?.currency ?? 'USD')}`} />
           <Fact label="Market cap" value={formatCompactNumber(companyProfile?.marketCapitalization ?? quote?.marketCapitalization ?? null)} />
           <Fact label="Volume" value={formatCompactNumber(quote?.volume ?? null)} />
+          <Fact label="Dividend yield" value={formatDividendYield(data.dividends?.data.yieldPercent ?? null)} />
           <Fact label="Exchange" value={quote?.exchange ?? '—'} />
           <Fact label="Website" value={companyProfile?.website === null || companyProfile?.website === undefined ? '—' : <a href={companyProfile.website} rel="noreferrer" target="_blank">{companyProfile.website}</a>} />
         </aside>
@@ -1237,6 +1267,7 @@ function InstrumentView({ dateFormat, instrument, onBack, onChanged, watchlists 
         <section className="card"><h2>In the news</h2><NewsList news={data.news?.data ?? []} /></section>
         <div className="details-side">
           <section className="card"><h2>Earnings</h2><UpcomingEarnings dateFormat={dateFormat} earnings={data.upcomingEarnings?.data ?? []} /><EarningsHistory calendar={data.upcomingEarnings?.data ?? []} dateFormat={dateFormat} earnings={data.earnings?.data ?? []} /></section>
+          <section className="card"><h2>Dividends</h2><DividendsSection currency={quote?.currency ?? 'USD'} dateFormat={dateFormat} dividends={data.dividends?.data ?? null} /></section>
           <section className="card recommendation-section"><h2>Analyst recommendations</h2><RecommendationTrendChart trends={data.recommendationTrends?.data ?? []} /></section>
         </div>
       </div>
@@ -1267,6 +1298,32 @@ function UpcomingEarnings({ dateFormat, earnings }: { dateFormat: Settings['date
   }
 
   return <div className="upcoming-earnings"><small>Upcoming release</small><strong>{formatReleaseDate(nextRelease.releaseDate, dateFormat)}{nextRelease.releaseTime === null ? '' : ` · ${nextRelease.releaseTime}`}</strong></div>;
+}
+
+function DividendsSection({ currency, dateFormat, dividends }: { currency: string; dateFormat: Settings['dateFormat']; dividends: DividendSummary | null }) {
+  if (dividends === null || dividends.records.length === 0) {
+    return <p className="muted">No dividend history available.</p>;
+  }
+
+  return (
+    <>
+      {dividends.nextDividend === null ? null : (
+        <div className="upcoming-earnings">
+          <small>Next expected</small>
+          <strong>{formatReleaseDate(dividends.nextDividend.exDividendDate, dateFormat)} · {formatCurrency(dividends.nextDividend.cashAmount, currency)}</strong>
+        </div>
+      )}
+      <div className="earnings-history">
+        {dividends.records.slice(0, 5).map((record) => (
+          <div className="earnings-history-item" key={record.exDividendDate}>
+            <span><small>Ex-dividend</small>{formatReleaseDate(record.exDividendDate, dateFormat)}</span>
+            <div className="earnings-metric"><small>Amount</small><strong>{formatCurrency(record.cashAmount, currency)}</strong></div>
+            <div className="earnings-metric"><small>Pay date</small><strong>{record.payDate === null ? '—' : formatReleaseDate(record.payDate, dateFormat)}</strong></div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
 }
 
 function EarningsHistory({ calendar, dateFormat, earnings }: { calendar: EarningsCalendarEntry[]; dateFormat: Settings['dateFormat']; earnings: EarningsRecord[] }) {
@@ -1311,6 +1368,10 @@ function earningsSurprise(actual: number | null | undefined, estimate: number | 
 
   const percent = ((actual - estimate) / Math.abs(estimate)) * 100;
   return { positive: percent >= 0, text: `${percent >= 0 ? '+' : ''}${percent.toFixed(2)}%` };
+}
+
+function formatDividendYield(value: number | null): string {
+  return value === null ? '—' : `${value.toFixed(2)}%`;
 }
 
 function formatEarningsPerShare(value: number | null | undefined): string {
