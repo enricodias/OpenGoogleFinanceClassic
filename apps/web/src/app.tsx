@@ -35,6 +35,55 @@ type View =
   | { kind: 'home' }
   | { instrument: InstrumentReference; kind: 'instrument' };
 
+function instrumentPath(instrument: InstrumentReference): string {
+  const params = new URLSearchParams();
+
+  if (instrument.exchange !== null) {
+    params.set('exchange', instrument.exchange);
+  }
+
+  if (instrument.name !== '') {
+    params.set('name', instrument.name);
+  }
+
+  if (instrument.type !== null) {
+    params.set('type', instrument.type);
+  }
+
+  const query = params.toString();
+
+  return `/instrument/${encodeURIComponent(instrument.symbol)}${query.length === 0 ? '' : `?${query}`}`;
+}
+
+function viewFromLocation(): View {
+  const match = /^\/instrument\/([^/]+)\/?$/.exec(window.location.pathname);
+  const symbol = match?.[1];
+
+  if (symbol === undefined) {
+    return { kind: 'home' };
+  }
+
+  const params = new URLSearchParams(window.location.search);
+
+  return {
+    instrument: {
+      exchange: params.get('exchange'),
+      name: params.get('name') ?? '',
+      symbol: decodeURIComponent(symbol),
+      type: params.get('type'),
+    },
+    kind: 'instrument',
+  };
+}
+
+function pathForView(view: View): string {
+  if (view.kind === 'home') {
+    return '/';
+  }
+
+  return instrumentPath(view.instrument);
+}
+
 interface InstrumentData {
   chart: CachedResult<ChartPoint[]> | null;
   dividends: CachedResult<DividendSummary> | null;
@@ -158,7 +207,22 @@ function FinanceApplication({ session, onSessionChanged }: {
   const [createWatchlistOpen, setCreateWatchlistOpen] = useState(false);
   const [renameWatchlistTarget, setRenameWatchlistTarget] = useState<Watchlist | null>(null);
   const [deleteWatchlistTarget, setDeleteWatchlistTarget] = useState<Watchlist | null>(null);
-  const [view, setView] = useState<View>({ kind: 'home' });
+  const [view, setView] = useState<View>(() => viewFromLocation());
+
+  useEffect(() => {
+    function handlePopState(): void {
+      setView(viewFromLocation());
+    }
+
+    window.addEventListener('popstate', handlePopState);
+
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  function navigateToView(nextView: View): void {
+    window.history.pushState(null, '', pathForView(nextView));
+    setView(nextView);
+  }
 
   async function loadDashboard(): Promise<void> {
     try {
@@ -258,7 +322,7 @@ function FinanceApplication({ session, onSessionChanged }: {
   }
 
   function openInstrument(instrument: InstrumentReference): void {
-    setView({ instrument, kind: 'instrument' });
+    navigateToView({ instrument, kind: 'instrument' });
   }
 
   const configuredProviders = settings?.configuredProviders ?? [];
@@ -268,7 +332,7 @@ function FinanceApplication({ session, onSessionChanged }: {
   return (
     <main className="application-shell">
       <header className="topbar">
-        <button className="brand" onClick={() => setView({ kind: 'home' })} type="button">
+        <button className="brand" onClick={() => navigateToView({ kind: 'home' })} type="button">
           <span className="brand-mark">OF</span>
           <span>Open Finance</span>
         </button>
@@ -314,7 +378,7 @@ function FinanceApplication({ session, onSessionChanged }: {
         <InstrumentView
           dateFormat={settings?.dateFormat ?? 'dd/mm/yyyy'}
           instrument={view.instrument}
-          onBack={() => setView({ kind: 'home' })}
+          onBack={() => navigateToView({ kind: 'home' })}
           onChanged={loadDashboard}
           watchlists={watchlists}
         />
