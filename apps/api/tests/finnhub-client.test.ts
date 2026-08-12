@@ -16,7 +16,7 @@ describe('FinnhubClient', () => {
     const client = new FinnhubClient('test-key', 'https://finnhub.example/api/v1', 1000);
 
     await expect(client.getCompanyProfile('META')).resolves.toEqual({
-      marketCapitalization: 1754300,
+      marketCapitalization: 1_754_300_000_000,
       website: 'https://about.meta.com',
     });
     expect(fetch).toHaveBeenCalledWith(

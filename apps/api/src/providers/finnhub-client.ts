@@ -21,7 +21,7 @@ export class FinnhubClient extends ProviderClient {
     const payload = readObject(await this.request('/stock/profile2', { symbol }));
 
     return {
-      marketCapitalization: readOptionalNumber(payload.marketCapitalization),
+      marketCapitalization: toUsd(readOptionalNumber(payload.marketCapitalization)),
       website: readOptionalString(payload.weburl),
     };
   }
@@ -140,6 +140,14 @@ export class FinnhubClient extends ProviderClient {
       };
     });
   }
+}
+
+function toUsd(value: number | null): number | null {
+  if (value === null) {
+    return null;
+  }
+
+  return value * 1_000_000;
 }
 
 function readNumber(value: unknown): number {
