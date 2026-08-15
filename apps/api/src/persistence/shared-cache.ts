@@ -24,6 +24,18 @@ export class SharedCache {
     return this.client;
   }
 
+  public async clear(): Promise<void> {
+    const keys: string[] = [];
+
+    for await (const key of this.client.scanIterator({ MATCH: 'market-cache:*' })) {
+      keys.push(key);
+    }
+
+    if (keys.length > 0) {
+      await this.client.del(keys);
+    }
+  }
+
   public async getOrLoad<T>(
     namespace: string,
     parameters: Record<string, unknown>,

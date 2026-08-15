@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 
 import type { WatchlistSortColumn, WatchlistSortDirection } from '../domain/user.js';
 import { HttpError } from '../errors/http-error.js';
+import { SharedCache } from '../persistence/shared-cache.js';
 import { UserRepository } from '../persistence/user-repository.js';
 import { SecretCipher } from '../security/secret-cipher.js';
 import { AuthService } from '../services/auth-service.js';
@@ -39,6 +40,7 @@ export function registerSettingsRoutes(
   auth: AuthService,
   users: UserRepository,
   cipher: SecretCipher,
+  cache: SharedCache,
 ): void {
   server.get('/api/settings', async (request) => {
     const user = await auth.requireCurrentUser(request);
@@ -106,6 +108,18 @@ export function registerSettingsRoutes(
     const providerId = readProviderId(request.params as { providerId?: unknown });
 
     await users.removeProviderCredential(user.id, providerId);
+
+    return reply.code(204).send();
+  });
+
+  server.post('/api/settings/cache/clear', async (request, reply) => {
+    await auth.requireCurrentUser(request);
+
+    if (auth.authenticationMode !== 'disabled') {
+      throw new HttpError(403, 'Clearing the cache is not available for this deployment.');
+    }
+
+    await cache.clear();
 
     return reply.code(204).send();
   });

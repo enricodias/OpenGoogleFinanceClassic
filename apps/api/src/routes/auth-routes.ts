@@ -8,6 +8,11 @@ interface AuthenticationBody {
   username?: unknown;
 }
 
+interface ChangePasswordBody {
+  currentPassword?: unknown;
+  newPassword?: unknown;
+}
+
 export function registerAuthRoutes(server: FastifyInstance, auth: AuthService): void {
   server.get('/api/auth/session', async (request) => {
     const user = await auth.getCurrentUser(request);
@@ -42,6 +47,13 @@ export function registerAuthRoutes(server: FastifyInstance, auth: AuthService): 
 
     return reply.code(204).send();
   });
+
+  server.post('/api/auth/change-password', async (request, reply) => {
+    const body = request.body as ChangePasswordBody;
+    await auth.changePassword(request, readCurrentPassword(body), readNewPassword(body));
+
+    return reply.code(204).send();
+  });
 }
 
 function publicUser(user: { id: string; username: string }) {
@@ -49,6 +61,22 @@ function publicUser(user: { id: string; username: string }) {
     id: user.id,
     username: user.username,
   };
+}
+
+function readCurrentPassword(body: ChangePasswordBody): string {
+  if (typeof body.currentPassword !== 'string') {
+    throw new HttpError(400, 'Current password is required.');
+  }
+
+  return body.currentPassword;
+}
+
+function readNewPassword(body: ChangePasswordBody): string {
+  if (typeof body.newPassword !== 'string') {
+    throw new HttpError(400, 'New password is required.');
+  }
+
+  return body.newPassword;
 }
 
 function readPassword(body: AuthenticationBody): string {

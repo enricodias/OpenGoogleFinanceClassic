@@ -180,6 +180,11 @@ export class UserRepository {
     } satisfies UserSettings);
   }
 
+  public async updatePasswordHash(userId: string, passwordHash: string): Promise<void> {
+    await setJson(this.client, this.userKey(userId), '$.passwordHash', passwordHash);
+    await setJson(this.client, this.userKey(userId), '$.updatedAt', new Date().toISOString());
+  }
+
   public async createSession(userId: string, ttlSeconds: number): Promise<Session> {
     const session: Session = {
       createdAt: new Date().toISOString(),

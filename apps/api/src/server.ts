@@ -77,7 +77,7 @@ export async function buildServer(
   registerHomeRoutes(server, auth, home);
   registerMarketGroupRoutes(server, auth, marketGroups);
   registerMarketDataRoutes(server, auth, marketData);
-  registerSettingsRoutes(server, auth, users, cipher);
+  registerSettingsRoutes(server, auth, users, cipher, cache);
   registerWatchlistRoutes(server, auth, users, watchlists);
 
   if (config.nodeEnvironment === 'production') {

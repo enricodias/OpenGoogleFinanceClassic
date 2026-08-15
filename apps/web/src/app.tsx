@@ -31,8 +31,11 @@ import {
 } from './format';
 import { useInstrumentColorStyle } from './instrument-color';
 
+type ProviderId = 'finnhub' | 'logo-dev' | 'massive' | 'twelve-data';
+
 type View =
   | { kind: 'home' }
+  | { kind: 'settings' }
   | { instrument: InstrumentReference; kind: 'instrument' };
 
 function instrumentPath(instrument: InstrumentReference): string {
@@ -56,6 +59,10 @@ function instrumentPath(instrument: InstrumentReference): string {
 }
 
 function viewFromLocation(): View {
+  if (window.location.pathname === '/settings') {
+    return { kind: 'settings' };
+  }
+
   const match = /^\/instrument\/([^/]+)\/?$/.exec(window.location.pathname);
   const symbol = match?.[1];
 
@@ -79,6 +86,10 @@ function viewFromLocation(): View {
 function pathForView(view: View): string {
   if (view.kind === 'home') {
     return '/';
+  }
+
+  if (view.kind === 'settings') {
+    return '/settings';
   }
 
   return instrumentPath(view.instrument);
@@ -202,7 +213,6 @@ function FinanceApplication({ session, onSessionChanged }: {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [watchlists, setWatchlists] = useState<Watchlist[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [marketGroupsOpen, setMarketGroupsOpen] = useState(false);
   const [createWatchlistOpen, setCreateWatchlistOpen] = useState(false);
   const [renameWatchlistTarget, setRenameWatchlistTarget] = useState<Watchlist | null>(null);
@@ -338,7 +348,7 @@ function FinanceApplication({ session, onSessionChanged }: {
         </button>
         <SearchBox onSelect={openInstrument} />
         <div className="topbar-actions">
-          <button aria-label="Open settings" className="icon-button" onClick={() => setSettingsOpen(true)} type="button">⚙</button>
+          <button aria-label={view.kind === 'settings' ? 'Close settings' : 'Open settings'} className="icon-button" onClick={() => navigateToView(view.kind === 'settings' ? { kind: 'home' } : { kind: 'settings' })} type="button">⚙</button>
           {session.authenticationMode === 'required' ? <button className="text-button" onClick={() => void logout()} type="button">Log out</button> : null}
         </div>
       </header>
@@ -346,13 +356,13 @@ function FinanceApplication({ session, onSessionChanged }: {
       {needsTwelveData ? (
         <section className="setup-banner">
           <span>Connect your Twelve Data key to load quotes, charts, profiles, and earnings.</span>
-          <button className="text-button" onClick={() => setSettingsOpen(true)} type="button">Open settings</button>
+          <button className="text-button" onClick={() => navigateToView({ kind: 'settings' })} type="button">Open settings</button>
         </section>
       ) : null}
       {needsFinnhub ? (
         <section className="setup-banner subtle-banner">
           <span>Finnhub is optional and enables market and company news.</span>
-          <button className="text-button" onClick={() => setSettingsOpen(true)} type="button">Add key</button>
+          <button className="text-button" onClick={() => navigateToView({ kind: 'settings' })} type="button">Add key</button>
         </section>
       ) : null}
 
@@ -374,7 +384,9 @@ function FinanceApplication({ session, onSessionChanged }: {
           sortDirection={settings?.watchlistSortDirection ?? 'desc'}
           watchlists={watchlists}
         />
-      ) : (
+      ) : null}
+
+      {view.kind === 'instrument' ? (
         <InstrumentView
           dateFormat={settings?.dateFormat ?? 'dd/mm/yyyy'}
           instrument={view.instrument}
@@ -382,7 +394,16 @@ function FinanceApplication({ session, onSessionChanged }: {
           onChanged={loadDashboard}
           watchlists={watchlists}
         />
-      )}
+      ) : null}
+
+      {view.kind === 'settings' ? (
+        <SettingsPage
+          authenticationMode={session.authenticationMode}
+          onBack={() => navigateToView({ kind: 'home' })}
+          onUpdated={() => void loadDashboard()}
+          settings={settings}
+        />
+      ) : null}
 
       {createWatchlistOpen ? (
         <WatchlistModal
@@ -409,13 +430,6 @@ function FinanceApplication({ session, onSessionChanged }: {
           onClose={() => setDeleteWatchlistTarget(null)}
           onConfirm={() => submitDeleteWatchlist(deleteWatchlistTarget.id)}
           title="Delete watchlist"
-        />
-      ) : null}
-      {settingsOpen ? (
-        <SettingsPanel
-          onClose={() => setSettingsOpen(false)}
-          onUpdated={() => void loadDashboard()}
-          settings={settings}
         />
       ) : null}
       {marketGroupsOpen && home !== null ? (
@@ -657,7 +671,7 @@ function compareNullableNumbers(a: number | null, b: number | null, direction: W
   return direction === 'asc' ? a - b : b - a;
 }
 
-function providerLabel(providerId: 'finnhub' | 'logo-dev' | 'massive' | 'twelve-data'): string {
+function providerLabel(providerId: ProviderId): string {
   if (providerId === 'twelve-data') {
     return 'Twelve Data';
   }
@@ -915,16 +929,54 @@ function ConfirmModal({
   );
 }
 
-function SettingsPanel({ onClose, onUpdated, settings }: {
-  onClose: () => void;
+function ExternalLinkIcon() {
+  return (
+    <svg aria-hidden="true" height="13" viewBox="0 0 24 24" width="13">
+      <path d="M14 3h7v7" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+      <path d="M21 3 10 14" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+      <path d="M21 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h6" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+    </svg>
+  );
+}
+
+function ProviderSettingsCard({ configured, description, onRemove, onSave, pending, title, url }: {
+  configured: boolean;
+  description: string;
+  onRemove: () => void;
+  onSave: (event: FormEvent<HTMLFormElement>) => void;
+  pending: boolean;
+  title: string;
+  url: string;
+}) {
+  return (
+    <section className="card stack">
+      <h2>{title}<a aria-label={`Open ${title} website`} className="external-link" href={url} rel="noreferrer" target="_blank"><ExternalLinkIcon /></a></h2>
+      <p className="muted">{description}</p>
+      <p className={`provider-status ${configured ? 'connected' : 'disconnected'}`}>{configured ? 'Connected' : 'Not connected'}</p>
+      <form className="inline-form" onSubmit={onSave}>
+        <input aria-label={`${title} API key`} name="apiKey" placeholder={configured ? '•••••••• (key saved)' : 'Paste API key'} required type="password" />
+        <div className="provider-key-actions">
+          <button className="secondary-button" disabled={pending} type="submit">{configured ? 'Update' : 'Save'}</button>
+          {configured ? <button className="text-button danger-button" disabled={pending} onClick={onRemove} type="button">Remove</button> : null}
+        </div>
+      </form>
+    </section>
+  );
+}
+
+function SettingsPage({ authenticationMode, onBack, onUpdated, settings }: {
+  authenticationMode: AuthSession['authenticationMode'];
+  onBack: () => void;
   onUpdated: () => void;
   settings: Settings | null;
 }) {
   const [message, setMessage] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [removeProviderTarget, setRemoveProviderTarget] = useState<ProviderId | null>(null);
+  const [clearCacheOpen, setClearCacheOpen] = useState(false);
   const configuredProviders = settings?.configuredProviders ?? [];
 
-  async function saveProvider(event: FormEvent<HTMLFormElement>, providerId: 'finnhub' | 'logo-dev' | 'massive' | 'twelve-data'): Promise<void> {
+  async function saveProvider(event: FormEvent<HTMLFormElement>, providerId: ProviderId): Promise<void> {
     event.preventDefault();
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
@@ -940,6 +992,41 @@ function SettingsPanel({ onClose, onUpdated, settings }: {
       formElement.reset();
       onUpdated();
       setMessage(`${providerLabel(providerId)} key saved.`);
+    } catch (requestError) {
+      setMessage(errorMessage(requestError));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function removeProvider(providerId: ProviderId): Promise<void> {
+    await api<void>(`/api/settings/providers/${providerId}`, { method: 'DELETE' });
+    onUpdated();
+    setMessage(`${providerLabel(providerId)} key removed.`);
+  }
+
+  async function changePassword(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const currentPassword = String(form.get('currentPassword') ?? '');
+    const newPassword = String(form.get('newPassword') ?? '');
+    const confirmPassword = String(form.get('confirmPassword') ?? '');
+
+    if (newPassword !== confirmPassword) {
+      setMessage('New password and confirmation do not match.');
+      return;
+    }
+
+    try {
+      setPending(true);
+      setMessage(null);
+      await api<void>('/api/auth/change-password', {
+        body: JSON.stringify({ currentPassword, newPassword }),
+        method: 'POST',
+      });
+      formElement.reset();
+      setMessage('Password updated.');
     } catch (requestError) {
       setMessage(errorMessage(requestError));
     } finally {
@@ -1038,86 +1125,166 @@ function SettingsPanel({ onClose, onUpdated, settings }: {
     }
   }
 
+  async function clearCache(): Promise<void> {
+    try {
+      setMessage(null);
+      await api<void>('/api/settings/cache/clear', { method: 'POST' });
+      setMessage('Cache cleared. Fresh market data will be fetched as needed.');
+    } catch (requestError) {
+      setMessage(errorMessage(requestError));
+    }
+  }
+
   return (
-    <div className="dialog-backdrop" role="presentation">
-      <aside aria-label="Settings" className="settings-panel">
-        <div className="dialog-header"><h2>Settings</h2><button className="icon-button" onClick={onClose} type="button">×</button></div>
-        <section className="stack">
-          <h3>Appearance</h3>
-          <div className="theme-options">
-            {(['light', 'dark', 'system'] as const).map((theme) => (
-              <button className={settings?.theme === theme ? 'selected' : ''} key={theme} onClick={() => void updateTheme(theme)} type="button">{theme}</button>
-            ))}
+    <section className="instrument-page settings-page">
+      <button className="back-button" onClick={onBack} type="button">← Back to overview</button>
+      <div className="instrument-header">
+        <div><h1>Settings</h1></div>
+      </div>
+      {message === null ? null : <p className="form-message" role="status">{message}</p>}
+
+      <section className="settings-section">
+        <h2 className="settings-section-title">General</h2>
+        <section className="card stack">
+          <h2>Appearance</h2>
+          <div className="settings-fields">
+            <div className="settings-field">
+              <span className="settings-field-label">Theme</span>
+              <div className="theme-options">
+                {(['light', 'dark', 'system'] as const).map((theme) => (
+                  <button className={settings?.theme === theme ? 'selected' : ''} key={theme} onClick={() => void updateTheme(theme)} type="button">{theme}</button>
+                ))}
+              </div>
+            </div>
+            <div className="settings-field">
+              <span className="settings-field-label">Quote refresh interval</span>
+              <select aria-label="Quote refresh interval" disabled={pending} onChange={(event) => void updateQuoteRefreshIntervalSeconds(Number(event.target.value))} value={settings?.quoteRefreshIntervalSeconds ?? 120}>
+                <option value={60}>60 seconds</option>
+                <option value={120}>120 seconds</option>
+                <option value={300}>5 minutes</option>
+                <option value={600}>10 minutes</option>
+              </select>
+            </div>
+            <div className="settings-field">
+              <span className="settings-field-label">Date format</span>
+              <select aria-label="Date format" disabled={pending} onChange={(event) => void updateDateFormat(event.target.value as Settings['dateFormat'])} value={settings?.dateFormat ?? 'dd/mm/yyyy'}>
+                <option value="dd/mm/yyyy">DD/MM/YYYY</option>
+                <option value="mm/dd/yyyy">MM/DD/YYYY</option>
+              </select>
+            </div>
           </div>
         </section>
-        <section className="stack">
-          <h3>Quote refresh interval</h3>
-          <p className="muted">Choose how often the dashboard requests fresh quotes. Longer intervals help stay within free API limits.</p>
-          <label className="settings-select">Refresh every
-            <select aria-label="Quote refresh interval" disabled={pending} onChange={(event) => void updateQuoteRefreshIntervalSeconds(Number(event.target.value))} value={settings?.quoteRefreshIntervalSeconds ?? 120}>
-              <option value={60}>60 seconds</option>
-              <option value={120}>120 seconds</option>
-              <option value={300}>5 minutes</option>
-              <option value={600}>10 minutes</option>
-            </select>
-          </label>
+      </section>
+
+      {authenticationMode === 'required' ? (
+        <section className="settings-section">
+          <h2 className="settings-section-title">Account</h2>
+          <div className="settings-grid">
+            <section className="card stack">
+              <h2>Change password</h2>
+              <form className="stack" onSubmit={(event) => void changePassword(event)}>
+                <label>Current password
+                  <input autoComplete="current-password" name="currentPassword" required type="password" />
+                </label>
+                <label>New password
+                  <input autoComplete="new-password" minLength={12} name="newPassword" required type="password" />
+                </label>
+                <label>Confirm new password
+                  <input autoComplete="new-password" minLength={12} name="confirmPassword" required type="password" />
+                </label>
+                <button className="secondary-button" disabled={pending} type="submit">Update password</button>
+              </form>
+            </section>
+          </div>
         </section>
-        <section className="stack">
-          <h3>Date format</h3>
-          <label className="settings-select">Display dates as
-            <select aria-label="Date format" disabled={pending} onChange={(event) => void updateDateFormat(event.target.value as Settings['dateFormat'])} value={settings?.dateFormat ?? 'dd/mm/yyyy'}>
-              <option value="dd/mm/yyyy">DD/MM/YYYY</option>
-              <option value="mm/dd/yyyy">MM/DD/YYYY</option>
-            </select>
-          </label>
-        </section>
-        <section className="stack">
-          <h3>Twelve Data</h3>
-          <p className="muted">Required for quotes, charts, company profiles, and earnings.</p>
-          <p className="provider-status">{configuredProviders.includes('twelve-data') ? 'Connected' : 'Not connected'}</p>
-          <form className="inline-form" onSubmit={(event) => void saveProvider(event, 'twelve-data')}>
-            <input aria-label="Twelve Data API key" name="apiKey" placeholder="Paste API key" required type="password" />
-            <button className="secondary-button" disabled={pending} type="submit">Save</button>
-          </form>
-        </section>
-        <section className="stack">
-          <h3>Finnhub</h3>
-          <p className="muted">Optional. Enables market and company news.</p>
-          <p className="provider-status">{configuredProviders.includes('finnhub') ? 'Connected' : 'Not connected'}</p>
-          <form className="inline-form" onSubmit={(event) => void saveProvider(event, 'finnhub')}>
-            <input aria-label="Finnhub API key" name="apiKey" placeholder="Paste API key" required type="password" />
-            <button className="secondary-button" disabled={pending} type="submit">Save</button>
-          </form>
-        </section>
-        <section className="stack">
-          <h3>Logo.dev</h3>
-          <p className="muted">Optional. Enables per-stock brand colors instead of a default color.</p>
-          <p className="provider-status">{configuredProviders.includes('logo-dev') ? 'Connected' : 'Not connected'}</p>
-          <form className="inline-form" onSubmit={(event) => void saveProvider(event, 'logo-dev')}>
-            <input aria-label="Logo.dev API key" name="apiKey" placeholder="Paste secret API key" required type="password" />
-            <button className="secondary-button" disabled={pending} type="submit">Save</button>
-          </form>
-        </section>
-        <section className="stack">
-          <h3>Massive</h3>
-          <p className="muted">Optional. Enables dividends and reduces chart load on Twelve Data.</p>
-          <p className="provider-status">{configuredProviders.includes('massive') ? 'Connected' : 'Not connected'}</p>
-          <form className="inline-form" onSubmit={(event) => void saveProvider(event, 'massive')}>
-            <input aria-label="Massive API key" name="apiKey" placeholder="Paste API key" required type="password" />
-            <button className="secondary-button" disabled={pending} type="submit">Save</button>
-          </form>
-        </section>
-        <section className="stack">
-          <h3>Backup and restore</h3>
-          <p className="muted">Exports include provider API keys in plain text so you can move your complete account. Keep backup files private.</p>
-          <button className="secondary-button" onClick={() => void downloadBackup()} type="button">Download backup</button>
-          <label className="restore-input">
-            Restore backup
-            <input accept="application/json,.json" disabled={pending} onChange={handleRestoreFileSelect} type="file" />
-          </label>
-        </section>
-        {message === null ? null : <p className="form-message" role="status">{message}</p>}
-      </aside>
+      ) : null}
+
+      <section className="settings-section">
+        <h2 className="settings-section-title">API keys</h2>
+        <div className="settings-grid">
+          <ProviderSettingsCard
+            configured={configuredProviders.includes('twelve-data')}
+            description="Required for quotes, charts, company profiles, and earnings."
+            onRemove={() => setRemoveProviderTarget('twelve-data')}
+            onSave={(event) => void saveProvider(event, 'twelve-data')}
+            pending={pending}
+            title="Twelve Data"
+            url="https://twelvedata.com"
+          />
+          <ProviderSettingsCard
+            configured={configuredProviders.includes('finnhub')}
+            description="Optional. Enables market and company news."
+            onRemove={() => setRemoveProviderTarget('finnhub')}
+            onSave={(event) => void saveProvider(event, 'finnhub')}
+            pending={pending}
+            title="Finnhub"
+            url="https://finnhub.io"
+          />
+          <ProviderSettingsCard
+            configured={configuredProviders.includes('logo-dev')}
+            description="Optional. Enables per-stock brand colors instead of a default color."
+            onRemove={() => setRemoveProviderTarget('logo-dev')}
+            onSave={(event) => void saveProvider(event, 'logo-dev')}
+            pending={pending}
+            title="Logo.dev"
+            url="https://logo.dev"
+          />
+          <ProviderSettingsCard
+            configured={configuredProviders.includes('massive')}
+            description="Optional. Enables dividends and reduces chart load on Twelve Data."
+            onRemove={() => setRemoveProviderTarget('massive')}
+            onSave={(event) => void saveProvider(event, 'massive')}
+            pending={pending}
+            title="Massive"
+            url="https://massive.com"
+          />
+        </div>
+      </section>
+
+      <section className="settings-section">
+        <h2 className="settings-section-title">Data</h2>
+        <div className="settings-grid">
+          {authenticationMode === 'disabled' ? (
+            <section className="card stack">
+              <h2>Cache</h2>
+              <p className="muted">Clears cached quotes, charts, news, dividends, and other market data. Settings, watchlists, and API keys are kept.</p>
+              <div className="settings-actions">
+                <button className="secondary-button" onClick={() => setClearCacheOpen(true)} type="button">Clear cache</button>
+              </div>
+            </section>
+          ) : null}
+          <section className="card stack">
+            <h2>Backup and restore</h2>
+            <p className="muted">Exports include provider API keys in plain text so you can move your complete account. Keep backup files private.</p>
+            <div className="settings-actions">
+              <button className="secondary-button" onClick={() => void downloadBackup()} type="button">Download backup</button>
+              <label className="secondary-button file-picker-button">
+                Restore backup
+                <input accept="application/json,.json" className="sr-only" disabled={pending} onChange={handleRestoreFileSelect} type="file" />
+              </label>
+            </div>
+          </section>
+        </div>
+      </section>
+      {removeProviderTarget !== null ? (
+        <ConfirmModal
+          confirmLabel="Remove key"
+          danger
+          message={`Remove the saved ${providerLabel(removeProviderTarget)} API key? Features that depend on it will stop working until you add a new key.`}
+          onClose={() => setRemoveProviderTarget(null)}
+          onConfirm={() => removeProvider(removeProviderTarget)}
+          title="Remove API key"
+        />
+      ) : null}
+      {clearCacheOpen ? (
+        <ConfirmModal
+          confirmLabel="Clear cache"
+          message="This clears cached quotes, charts, news, and other market data. Settings, watchlists, and API keys are kept. Fresh data will be fetched as needed."
+          onClose={() => setClearCacheOpen(false)}
+          onConfirm={clearCache}
+          title="Clear cache"
+        />
+      ) : null}
       {restoreFile !== null ? (
         <ConfirmModal
           confirmLabel="Restore"
@@ -1128,7 +1295,7 @@ function SettingsPanel({ onClose, onUpdated, settings }: {
           title="Restore backup"
         />
       ) : null}
-    </div>
+    </section>
   );
 }
 
@@ -1186,7 +1353,7 @@ function MarketGroupsPanel({ groups: initialGroups, onClose, onUpdated }: {
 
   return (
     <div className="dialog-backdrop" role="presentation">
-      <aside aria-label="Customize market overview" className="settings-panel market-groups-panel">
+      <aside aria-label="Customize market overview" className="market-groups-panel">
         <div className="dialog-header"><h2>Customize market overview</h2><button className="icon-button" onClick={onClose} type="button">×</button></div>
         <p className="muted">Choose the groups and quotes shown at the top of your dashboard. Add symbols supported by your market-data provider.</p>
         <form className="stack" onSubmit={(event) => void save(event)}>

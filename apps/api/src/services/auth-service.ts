@@ -72,6 +72,32 @@ export class AuthService {
     reply.clearCookie(SESSION_COOKIE_NAME, this.cookieOptions());
   }
 
+  public async changePassword(
+    request: FastifyRequest,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    if (this.config.authenticationMode === 'disabled') {
+      throw new HttpError(403, 'Password changes are not available for this deployment.');
+    }
+
+    const user = await this.requireCurrentUser(request);
+
+    if (user.passwordHash === null) {
+      throw new HttpError(401, 'Current password is incorrect.');
+    }
+
+    const currentPasswordMatches = await argon2.verify(user.passwordHash, currentPassword);
+
+    if (!currentPasswordMatches) {
+      throw new HttpError(401, 'Current password is incorrect.');
+    }
+
+    this.validatePassword(newPassword);
+
+    await this.users.updatePasswordHash(user.id, await this.hashPassword(newPassword));
+  }
+
   public async register(
     usernameInput: string,
     password: string,
@@ -88,12 +114,7 @@ export class AuthService {
     const username = this.normalizeUsername(usernameInput);
     this.validatePassword(password);
 
-    const passwordHash = await argon2.hash(password, {
-      memoryCost: 19456,
-      parallelism: 1,
-      timeCost: 3,
-      type: argon2.argon2id,
-    });
+    const passwordHash = await this.hashPassword(password);
     const user = await this.users.createUser(username, passwordHash);
 
     if (user === null) {
@@ -113,6 +134,15 @@ export class AuthService {
     }
 
     return user;
+  }
+
+  private async hashPassword(password: string): Promise<string> {
+    return argon2.hash(password, {
+      memoryCost: 19456,
+      parallelism: 1,
+      timeCost: 3,
+      type: argon2.argon2id,
+    });
   }
 
   private cookieOptions() {
