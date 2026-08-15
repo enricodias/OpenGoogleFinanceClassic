@@ -168,7 +168,7 @@ function AuthenticationScreen({ session, onAuthenticated }: {
     <main className="auth-page">
       <section className="auth-card">
         <p className="eyebrow">Personal market dashboard</p>
-        <h1>Open Finance Classic</h1>
+        <h1>Open Google Finance Classic</h1>
         <p className="muted">A private, self-hosted space for your watchlists and market research.</p>
         <form className="stack" onSubmit={submit}>
           <label>
@@ -333,8 +333,8 @@ function FinanceApplication({ session, onSessionChanged }: {
     <main className="application-shell">
       <header className="topbar">
         <button className="brand" onClick={() => navigateToView({ kind: 'home' })} type="button">
-          <span className="brand-mark">OF</span>
-          <span>Open Finance</span>
+          <span className="brand-mark">Open</span>
+          <span>Google Finance Classic</span>
         </button>
         <SearchBox onSelect={openInstrument} />
         <div className="topbar-actions">

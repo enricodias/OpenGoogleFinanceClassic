@@ -1,6 +1,6 @@
-# Open Finance Classic
+# Open Google Finance Classic
 
-A private, self-hosted finance dashboard with an original interface inspired by classic market dashboards.
+A private, self-hosted finance dashboard recreating the old classic interface of Google Finance.
 
 ## Development setup
 
