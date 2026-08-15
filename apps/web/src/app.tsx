@@ -370,7 +370,6 @@ function FinanceApplication({ session, onSessionChanged }: {
 
       {view.kind === 'home' ? (
         <Dashboard
-          dateFormat={settings?.dateFormat ?? 'dd/mm/yyyy'}
           home={home}
           onCreateWatchlist={() => setCreateWatchlistOpen(true)}
           onDeleteWatchlist={(watchlist) => setDeleteWatchlistTarget(watchlist)}
@@ -450,8 +449,7 @@ function FinanceApplication({ session, onSessionChanged }: {
   );
 }
 
-function Dashboard({ dateFormat, home, onCreateWatchlist, onDeleteWatchlist, onEditMarketGroups, onOpenInstrument, onRenameWatchlist, onRemoveWatchlistEntry, onSelectWatchlist, onSortWatchlist, sortColumn, sortDirection, watchlists }: {
-  dateFormat: Settings['dateFormat'];
+function Dashboard({ home, onCreateWatchlist, onDeleteWatchlist, onEditMarketGroups, onOpenInstrument, onRenameWatchlist, onRemoveWatchlistEntry, onSelectWatchlist, onSortWatchlist, sortColumn, sortDirection, watchlists }: {
   home: HomeData | null;
   onCreateWatchlist: () => void;
   onDeleteWatchlist: (watchlist: Watchlist) => void;
@@ -527,7 +525,7 @@ function Dashboard({ dateFormat, home, onCreateWatchlist, onDeleteWatchlist, onE
           <section className="card">
             <h2>Earnings calendar</h2>
             <p className="muted">Upcoming releases</p>
-            <EarningsList dateFormat={dateFormat} earnings={home.earningsCalendar?.data ?? []} />
+            <EarningsList earnings={home.earningsCalendar?.data ?? []} />
           </section>
         </aside>
       </div>
@@ -717,7 +715,7 @@ function NewsList({ news }: { news: NewsArticle[] }) {
   );
 }
 
-function EarningsList({ dateFormat, earnings }: { dateFormat: Settings['dateFormat']; earnings: EarningsCalendarEntry[] }) {
+function EarningsList({ earnings }: { earnings: EarningsCalendarEntry[] }) {
   if (earnings.length === 0) {
     return <p className="muted">No earnings data available.</p>;
   }
@@ -726,7 +724,7 @@ function EarningsList({ dateFormat, earnings }: { dateFormat: Settings['dateForm
     <div className="earnings-list">
       {earnings.map((entry) => (
         <div className="earnings-item" key={`${entry.symbol}-${entry.releaseDate}`}>
-          <span className="date-box"><small>{formatReleaseDate(entry.releaseDate, dateFormat, 'month')}</small>{formatReleaseDate(entry.releaseDate, dateFormat, 'day')}</span>
+          <span className="date-box"><small>{formatEarningsCalendarDate(entry.releaseDate, 'month')}</small>{formatEarningsCalendarDate(entry.releaseDate, 'day')}</span>
           <span><strong>{entry.name}</strong><small>{entry.symbol} · {entry.releaseTime ?? 'Time TBA'}</small></span>
         </div>
       ))}
@@ -1497,7 +1495,7 @@ function InstrumentView({ dateFormat, instrument, onBack, onChanged, watchlists 
       <div className="details-grid">
         <section className="card"><h2>In the news</h2><NewsList news={data.news?.data ?? []} /></section>
         <div className="details-side">
-          <section className="card"><h2>Earnings</h2><UpcomingEarnings dateFormat={dateFormat} earnings={data.upcomingEarnings?.data ?? []} /><EarningsHistory calendar={data.upcomingEarnings?.data ?? []} dateFormat={dateFormat} earnings={data.earnings?.data ?? []} /></section>
+          <section className="card"><h2>Earnings</h2><UpcomingEarnings earnings={data.upcomingEarnings?.data ?? []} /><EarningsHistory calendar={data.upcomingEarnings?.data ?? []} dateFormat={dateFormat} earnings={data.earnings?.data ?? []} /></section>
           <section className="card"><h2>Dividends</h2><DividendsSection currency={quote?.currency ?? 'USD'} dateFormat={dateFormat} dividends={data.dividends?.data ?? null} /></section>
           <section className="card recommendation-section"><h2>Analyst recommendations</h2><RecommendationTrendChart trends={data.recommendationTrends?.data ?? []} /></section>
         </div>
@@ -1521,14 +1519,22 @@ function chartRange(range: string): { interval: string; outputsize: number } {
   return RANGE_OPTIONS[range] ?? DEFAULT_RANGE;
 }
 
-function UpcomingEarnings({ dateFormat, earnings }: { dateFormat: Settings['dateFormat']; earnings: EarningsCalendarEntry[] }) {
+function UpcomingEarnings({ earnings }: { earnings: EarningsCalendarEntry[] }) {
   const nextRelease = earnings.filter((entry) => entry.releaseDate >= today()).sort((left, right) => left.releaseDate.localeCompare(right.releaseDate))[0];
 
   if (nextRelease === undefined) {
     return null;
   }
 
-  return <div className="upcoming-earnings"><small>Upcoming release</small><strong>{formatReleaseDate(nextRelease.releaseDate, dateFormat)}{nextRelease.releaseTime === null ? '' : ` · ${nextRelease.releaseTime}`}</strong></div>;
+  return (
+    <div className="upcoming-earnings">
+      <span className="date-box"><small>{formatEarningsCalendarDate(nextRelease.releaseDate, 'month')}</small>{formatEarningsCalendarDate(nextRelease.releaseDate, 'day')}</span>
+      <span>
+        <small>Upcoming release</small>
+        <strong>{formatEarningsCalendarDate(nextRelease.releaseDate)}{nextRelease.releaseTime === null ? '' : ` · ${nextRelease.releaseTime}`}</strong>
+      </span>
+    </div>
+  );
 }
 
 function DividendsSection({ currency, dateFormat, dividends }: { currency: string; dateFormat: Settings['dateFormat']; dividends: DividendSummary | null }) {
@@ -1625,18 +1631,28 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
-function formatReleaseDate(value: string, format: Settings['dateFormat'], part?: 'day' | 'month'): string {
+function formatReleaseDate(value: string, format: Settings['dateFormat']): string {
   const [year = '', month = '', day = ''] = value.split('-');
 
-  if (part === 'day') {
-    return format === 'dd/mm/yyyy' ? day : month;
-  }
+  return format === 'dd/mm/yyyy' ? `${day}/${month}/${year}` : `${month}/${day}/${year}`;
+}
+
+const EARNINGS_CALENDAR_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function formatEarningsCalendarDate(value: string, part?: 'day' | 'month'): string {
+  const [year = '', month = '', day = ''] = value.split('-');
+  const monthLabel = EARNINGS_CALENDAR_MONTHS[Number.parseInt(month, 10) - 1] ?? '';
+  const dayLabel = String(Number.parseInt(day, 10));
 
   if (part === 'month') {
-    return format === 'dd/mm/yyyy' ? month : day;
+    return monthLabel.toUpperCase();
   }
 
-  return format === 'dd/mm/yyyy' ? `${day}/${month}/${year}` : `${month}/${day}/${year}`;
+  if (part === 'day') {
+    return dayLabel;
+  }
+
+  return `${monthLabel} ${dayLabel}, ${year}`;
 }
 
 function today(): string {
