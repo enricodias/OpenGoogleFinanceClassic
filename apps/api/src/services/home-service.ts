@@ -112,12 +112,12 @@ export class HomeService {
 
     try {
       const today = new Date().toISOString().slice(0, 10);
-      const nextWeek = new Date();
-      nextWeek.setUTCDate(nextWeek.getUTCDate() + 7);
+      const horizon = new Date();
+      horizon.setUTCDate(horizon.getUTCDate() + 180);
       const earningsCalendar = await this.marketData.getEarningsCalendar(
         userId,
         today,
-        nextWeek.toISOString().slice(0, 10),
+        horizon.toISOString().slice(0, 10),
       );
       const instruments = instrumentsBySymbol(watchlist);
       const entries = earningsCalendar.data.flatMap((entry) => {

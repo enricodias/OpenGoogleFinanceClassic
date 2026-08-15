@@ -1412,7 +1412,7 @@ function InstrumentView({ dateFormat, instrument, onBack, onChanged, watchlists 
           api<CachedResult<ChartPoint[]>>(`/api/market/chart?symbol=${encodeURIComponent(instrument.symbol)}&interval=${details.interval}&outputsize=${details.outputsize}`),
           api<CachedResult<CompanySnapshot>>(`/api/market/company-profile?symbol=${encodeURIComponent(instrument.symbol)}`),
           api<CachedResult<EarningsRecord[]>>(`/api/market/earnings?symbol=${encodeURIComponent(instrument.symbol)}`),
-          api<CachedResult<EarningsCalendarEntry[]>>(`/api/market/earnings-calendar?symbol=${encodeURIComponent(instrument.symbol)}&from=${daysAgo(31)}&to=${daysFromToday(90)}`),
+          api<CachedResult<EarningsCalendarEntry[]>>(`/api/market/earnings-calendar?symbol=${encodeURIComponent(instrument.symbol)}&from=${daysAgo(31)}&to=${daysFromToday(180)}`),
           api<CachedResult<NewsArticle[]>>(`/api/market/company-news?symbol=${encodeURIComponent(instrument.symbol)}`),
           api<CachedResult<RecommendationTrend[]>>(`/api/market/recommendation-trends?symbol=${encodeURIComponent(instrument.symbol)}`),
           api<CachedResult<DividendSummary>>(`/api/market/dividends?symbol=${encodeURIComponent(instrument.symbol)}`),
